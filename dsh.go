@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -127,12 +126,8 @@ func (m *dshManager) stop() {
 		return
 	}
 
-	// Kill the whole process group (npx -> node -> dsh) rather than just npx.
-	if pgid, err := syscall.Getpgid(cmd.Process.Pid); err == nil {
-		_ = syscall.Kill(-pgid, syscall.SIGTERM)
-	} else {
-		_ = cmd.Process.Signal(syscall.SIGTERM)
-	}
+	// Terminate the whole process tree (npx -> node -> dsh), not just npx.
+	terminateProcessTree(cmd, false)
 
 	if done == nil {
 		return
@@ -140,11 +135,7 @@ func (m *dshManager) stop() {
 	select {
 	case <-done:
 	case <-time.After(killGrace):
-		if pgid, err := syscall.Getpgid(cmd.Process.Pid); err == nil {
-			_ = syscall.Kill(-pgid, syscall.SIGKILL)
-		} else {
-			_ = cmd.Process.Kill()
-		}
+		terminateProcessTree(cmd, true)
 		<-done
 	}
 }
@@ -177,7 +168,7 @@ func (m *dshManager) run() {
 		return
 	}
 
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	configureSysProcAttr(cmd)
 
 	if err := cmd.Start(); err != nil {
 		m.fail(fmt.Errorf("启动 dsh 失败: %w", err))
