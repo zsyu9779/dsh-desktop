@@ -27,8 +27,8 @@
 - **Windows**：`dsh-desktop-windows-amd64-installer.exe`（安装向导），或同目录的 `.exe` 免安装版
 - **Linux**：`dsh-desktop-linux-amd64.tar.gz`
 
-> macOS 首次打开未签名应用会被 Gatekeeper 拦截，右键「打开」，或在终端执行
-> `xattr -dr com.apple.quarantine "/Applications/dsh-desktop.app"`。
+> macOS 首次打开未签名应用会被 Gatekeeper 拦截：右键应用「打开」即可放行；或在终端执行
+> `xattr -d com.apple.quarantine "/Applications/dsh-desktop.app"`。
 
 ## 环境要求
 
