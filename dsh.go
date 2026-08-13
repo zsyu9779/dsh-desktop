@@ -309,16 +309,29 @@ func (m *dshManager) pump(r io.Reader) {
 
 // buildCommand constructs the dsh launcher command.
 func (m *dshManager) buildCommand(port int) (*exec.Cmd, error) {
-	var cmd *exec.Cmd
 	portStr := fmt.Sprintf("%d", port)
+	webArgs := []string{"web", "--host", "127.0.0.1", "--port", portStr, "--trusted-host", "127.0.0.1"}
 
+	var bin string
+	var args []string
 	if custom := strings.TrimSpace(os.Getenv("DSH_COMMAND")); custom != "" {
 		parts := strings.Fields(custom)
-		args := append(parts[1:], "web", "--host", "127.0.0.1", "--port", portStr, "--trusted-host", "127.0.0.1")
-		cmd = exec.Command(parts[0], args...)
+		bin = parts[0]
+		args = append(parts[1:], webArgs...)
 	} else {
-		cmd = exec.Command("npx", "-y", dshPackage, "web", "--host", "127.0.0.1", "--port", portStr, "--trusted-host", "127.0.0.1")
+		bin = "npx"
+		args = append([]string{"-y", dshPackage}, webArgs...)
 	}
+
+	// Resolve the launcher's absolute path explicitly: macOS GUI apps are
+	// launched by launchd with a minimal PATH that omits Homebrew/nvm/fnm/volta,
+	// so `npx` would otherwise not be found even when Node.js is installed.
+	binPath, err := findExecutable(bin)
+	if err != nil {
+		return nil, fmt.Errorf("未找到 %q，请先安装 Node.js（需要 npx）: %w", bin, err)
+	}
+
+	cmd := exec.Command(binPath, args...)
 
 	// Working directory: the user's project, overridable via DSH_WORKSPACE.
 	wd := strings.TrimSpace(os.Getenv("DSH_WORKSPACE"))
@@ -331,8 +344,96 @@ func (m *dshManager) buildCommand(port int) (*exec.Cmd, error) {
 		cmd.Dir = wd
 	}
 
-	cmd.Env = os.Environ()
+	// Extend PATH so npx's `#!/usr/bin/env node` shebang and any subprocesses
+	// (pnpm, node) resolve from the same Node.js installation.
+	cmd.Env = augmentedEnv()
 	return cmd, nil
+}
+
+// findExecutable returns the absolute path to `name`. It first uses the
+// standard lookup (which on Windows also honours PATHEXT), then falls back to
+// searching common Node.js install locations for macOS GUI launches.
+func findExecutable(name string) (string, error) {
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+	if filepath.IsAbs(name) {
+		if isExec(name) {
+			return name, nil
+		}
+		return "", fmt.Errorf("%s: executable file not found", name)
+	}
+	for _, dir := range nodeBinPaths() {
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, name)
+		if isExec(candidate) {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("%s: executable file not found", name)
+}
+
+// isExec reports whether p is an existing executable file.
+func isExec(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
+}
+
+// nodeBinPaths returns candidate directories where Node.js tooling is commonly
+// installed, in precedence order, followed by the standard system dirs and the
+// current process PATH.
+func nodeBinPaths() []string {
+	var dirs []string
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		nvmBase := filepath.Join(home, ".nvm", "versions", "node")
+		if entries, err := os.ReadDir(nvmBase); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					dirs = append(dirs, filepath.Join(nvmBase, e.Name(), "bin"))
+				}
+			}
+		}
+		dirs = append(dirs,
+			filepath.Join(home, ".volta", "bin"),
+			filepath.Join(home, ".local", "share", "fnm"),
+			filepath.Join(home, ".fnm"),
+			filepath.Join(home, ".asdf", "shims"),
+		)
+	}
+	dirs = append(dirs,
+		"/opt/homebrew/bin",
+		"/usr/local/bin",
+		"/opt/local/bin",
+		"/usr/bin",
+		"/bin",
+		"/usr/sbin",
+		"/sbin",
+	)
+	dirs = append(dirs, filepath.SplitList(os.Getenv("PATH"))...)
+	return dirs
+}
+
+// augmentedEnv returns the process environment with PATH extended to include
+// nodeBinPaths, so the child's `#!/usr/bin/env node` shebangs resolve.
+func augmentedEnv() []string {
+	aug := strings.Join(nodeBinPaths(), string(os.PathListSeparator))
+	env := os.Environ()
+	out := make([]string, 0, len(env)+1)
+	set := false
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			out = append(out, "PATH="+aug)
+			set = true
+		} else {
+			out = append(out, kv)
+		}
+	}
+	if !set {
+		out = append(out, "PATH="+aug)
+	}
+	return out
 }
 
 // findPort returns the preferred port if free, otherwise a random free port.

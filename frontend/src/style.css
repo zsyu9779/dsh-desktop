@@ -57,6 +57,16 @@ body {
     justify-content: center;
     background: linear-gradient(135deg, #6a8bff 0%, var(--accent) 60%, #3b4fd8 100%);
     box-shadow: 0 12px 40px rgba(77, 107, 254, 0.45);
+    animation: pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
 }
 
 .logo-mark {
@@ -106,6 +116,35 @@ body {
 @keyframes spin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+.progress {
+    width: min(280px, 60vw);
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg-accent);
+    overflow: hidden;
+}
+
+.progress.hidden {
+    display: none;
+}
+
+.progress-bar {
+    width: 40%;
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: slide 1.2s ease-in-out infinite;
+}
+
+@keyframes slide {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(250%);
     }
 }
 

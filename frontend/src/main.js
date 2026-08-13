@@ -6,11 +6,13 @@ const App = window.go.main.App;
 
 const statusText = document.getElementById('status-text');
 const spinner = document.getElementById('spinner');
+const progress = document.getElementById('progress');
 const actions = document.getElementById('actions');
 const logsEl = document.getElementById('logs');
 
 function setBusy(busy) {
     spinner.classList.toggle('hidden', !busy);
+    progress.classList.toggle('hidden', !busy);
 }
 
 function setActionsVisible(visible) {
