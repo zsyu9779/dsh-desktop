@@ -6,6 +6,8 @@ export function Logs():Promise<string>;
 
 export function OpenInBrowser():Promise<void>;
 
+export function OpenNodeJS():Promise<void>;
+
 export function Quit():Promise<void>;
 
 export function Retry():Promise<void>;

@@ -46,6 +46,7 @@ function handleStatus(s) {
 }
 
 document.getElementById('btn-retry').addEventListener('click', () => App.Retry());
+document.getElementById('btn-node').addEventListener('click', () => App.OpenNodeJS());
 document.getElementById('btn-browser').addEventListener('click', () => App.OpenInBrowser());
 document.getElementById('btn-quit').addEventListener('click', () => App.Quit());
 document.getElementById('btn-logs').addEventListener('click', async () => {

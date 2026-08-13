@@ -10,6 +10,10 @@ export function OpenInBrowser() {
   return window['go']['main']['App']['OpenInBrowser']();
 }
 
+export function OpenNodeJS() {
+  return window['go']['main']['App']['OpenNodeJS']();
+}
+
 export function Quit() {
   return window['go']['main']['App']['Quit']();
 }

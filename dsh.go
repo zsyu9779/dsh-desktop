@@ -140,9 +140,26 @@ func (m *dshManager) stop() {
 	}
 }
 
-// run performs the actual launch: pick a port, spawn dsh, wait for readiness.
+// run performs the actual launch: check env, warm up, pick a port, spawn dsh,
+// wait for readiness.
 func (m *dshManager) run() {
 	m.stopping.Store(false)
+
+	// 1) Environment check: Node.js / npx must be present.
+	m.setStatus("starting", "正在检查环境…")
+	if err := m.checkEnvironment(); err != nil {
+		m.fail(err)
+		return
+	}
+
+	// 2) Pre-install / warm-up: pre-download the dsh package on first run.
+	m.setStatus("starting", "正在准备 DeepSeek Harness（首次运行需下载依赖，请稍候）…")
+	if err := m.warmUp(); err != nil {
+		m.fail(fmt.Errorf("下载 DeepSeek Harness 失败，请检查网络后重试: %w", err))
+		return
+	}
+
+	// 3) Launch + readiness.
 	m.setStatus("starting", "正在启动 DeepSeek Harness…")
 
 	port, err := findPort()
@@ -334,13 +351,7 @@ func (m *dshManager) buildCommand(port int) (*exec.Cmd, error) {
 	cmd := exec.Command(binPath, args...)
 
 	// Working directory: the user's project, overridable via DSH_WORKSPACE.
-	wd := strings.TrimSpace(os.Getenv("DSH_WORKSPACE"))
-	if wd == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			wd = home
-		}
-	}
-	if wd != "" {
+	if wd := workspaceDir(); wd != "" {
 		cmd.Dir = wd
 	}
 
@@ -434,6 +445,59 @@ func augmentedEnv() []string {
 		out = append(out, "PATH="+aug)
 	}
 	return out
+}
+
+// workspaceDir returns the directory dsh should run in (DSH_WORKSPACE or home).
+func workspaceDir() string {
+	if wd := strings.TrimSpace(os.Getenv("DSH_WORKSPACE")); wd != "" {
+		return wd
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return home
+	}
+	return ""
+}
+
+// checkEnvironment verifies Node.js / npx are available and logs their paths.
+func (m *dshManager) checkEnvironment() error {
+	npxPath, err := findExecutable("npx")
+	if err != nil {
+		return fmt.Errorf("未检测到 Node.js / npx。请先安装 Node.js（https://nodejs.org）后重新打开本应用。")
+	}
+	m.logf("npx: %s", npxPath)
+	if nodePath, err := findExecutable("node"); err == nil {
+		if out, err := exec.Command(nodePath, "--version").Output(); err == nil {
+			m.logf("node: %s (%s)", nodePath, strings.TrimSpace(string(out)))
+		}
+	}
+	return nil
+}
+
+// warmUp pre-downloads the dsh package into the npx cache so the subsequent
+// `web` launch starts quickly, giving clearer first-run progress.
+func (m *dshManager) warmUp() error {
+	npxPath, err := findExecutable("npx")
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, npxPath, "-y", dshPackage, "--version")
+	cmd.Env = augmentedEnv()
+	if wd := workspaceDir(); wd != "" {
+		cmd.Dir = wd
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("下载超时")
+		}
+		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+	}
+	m.logf("dsh version: %s", strings.TrimSpace(string(out)))
+	return nil
 }
 
 // findPort returns the preferred port if free, otherwise a random free port.

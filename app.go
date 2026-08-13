@@ -52,6 +52,11 @@ func (a *App) OpenInBrowser() {
 	}
 }
 
+// OpenNodeJS opens the Node.js download page in the system browser.
+func (a *App) OpenNodeJS() {
+	runtime.BrowserOpenURL(a.ctx, "https://nodejs.org")
+}
+
 // Logs returns recent DeepSeek Harness log lines.
 func (a *App) Logs() string {
 	return a.dsh.logsString()
