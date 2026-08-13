@@ -2,5 +2,6 @@ build/bin
 node_modules
 frontend/dist
 
-# compiled binary from `go build`
+# compiled binaries from `go build` (named after the module)
 /dsh-desktop
+/dsh-desktop.exe
