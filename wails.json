@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "dsh-desktop",
+  "outputfilename": "dsh-desktop",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "jayden",
+    "email": "jayden@micous.com"
+  },
+  "info": {
+    "productName": "DeepSeek Harness",
+    "productVersion": "0.1.0",
+    "copyright": "Unofficial desktop shell for DeepSeek Harness",
+    "comments": "Unofficial Wails shell wrapping the DeepSeek Harness web UI."
+  }
+}
