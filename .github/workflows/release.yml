@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin/universal
+          - os: windows-latest
+            platform: windows/amd64
+          - os: ubuntu-22.04
+            platform: linux/amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev \
+            libayatana-appindicator3-dev pkg-config build-essential
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+
+      - name: Build
+        run: wails build -platform ${{ matrix.platform }} -clean
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          mkdir -p dist
+          case "${{ matrix.os }}" in
+            macos-latest)
+              ditto -c -k --sequesterRsrc --keepParent "build/bin/dsh-desktop.app" "dist/dsh-desktop-darwin-universal.zip"
+              hdiutil create -volname "DeepSeek Harness" -srcfolder "build/bin/dsh-desktop.app" -ov -format UDZO "dist/dsh-desktop-darwin-universal.dmg"
+              ;;
+            windows-latest)
+              cp build/bin/*.exe dist/
+              ;;
+            ubuntu-22.04)
+              tar -czf dist/dsh-desktop-linux-amd64.tar.gz -C build/bin dsh-desktop
+              cp build/bin/*.deb build/bin/*.rpm dist/ 2>/dev/null || true
+              ;;
+          esac
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-desktop-${{ matrix.os }}
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**
+          generate_release_notes: true

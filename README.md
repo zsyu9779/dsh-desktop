@@ -19,6 +19,17 @@
 - 自动安装并固定 DeepSeek Harness 版本
 - 日志写入 `~/.dsh-desktop/logs/dsh.log`
 
+## 下载 / 安装
+
+前往 [Releases](https://github.com/zsyu9779/dsh-desktop/releases) 下载对应平台的安装包：
+
+- **macOS**：`dsh-desktop-darwin-universal.dmg`（Intel + Apple Silicon 通用）
+- **Windows**：`dsh-desktop-windows-amd64-installer.exe`（安装向导），或同目录的 `.exe` 免安装版
+- **Linux**：`dsh-desktop-linux-amd64.tar.gz`
+
+> macOS 首次打开未签名应用会被 Gatekeeper 拦截，右键「打开」，或在终端执行
+> `xattr -dr com.apple.quarantine "/Applications/dsh-desktop.app"`。
+
 ## 环境要求
 
 - Go 1.23+
@@ -36,6 +47,15 @@ wails build
 
 ```bash
 wails dev
+```
+
+## 发布新版本
+
+推送 `v*` 标签即可触发 GitHub Actions 自动构建 macOS / Windows / Linux 三平台安装包并发布到 Releases：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 ## 配置（环境变量）
