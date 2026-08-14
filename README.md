@@ -9,7 +9,7 @@ DeepSeek Harness Desktop 是一个开源、跨平台的 DeepSeek Harness 桌面�
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/zsyu9779/dsh-desktop/releases/latest)
 
-> [下载最新版](https://github.com/zsyu9779/dsh-desktop/releases/latest) · [查看 DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [报告问题](https://github.com/zsyu9779/dsh-desktop/issues)
+> [项目官网](https://zsyu9779.github.io/dsh-desktop/) · [下载最新版](https://github.com/zsyu9779/dsh-desktop/releases/latest) · [查看 DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [报告问题](https://github.com/zsyu9779/dsh-desktop/issues)
 
 > [!IMPORTANT]
 > 本项目是社区维护的非官方桌面壳，与 DeepSeek 或 DeepSeek AI 无隶属关系。DeepSeek Harness 仍处于开发者预览阶段，其功能和接口可能发生变化。
