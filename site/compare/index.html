@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DeepSeek Harness Desktop vs Web UI and Electron Wrappers</title>
+  <meta name="description" content="A factual comparison of the lightweight Wails DeepSeek Harness Desktop, the official Web UI and bundled Electron desktop wrappers.">
+  <link rel="canonical" href="https://zsyu9779.github.io/dsh-desktop/compare/">
+  <link rel="icon" href="../assets/icon.png"><link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="shell nav"><a class="brand" href="../"><img src="../assets/icon.png" alt="" width="30" height="30"><span>DeepSeek Harness Desktop</span></a><nav class="nav-links" aria-label="Primary navigation"><a href="./">Compare</a><a href="../architecture/">Architecture</a><a href="../security/">Security</a><a href="../faq/">FAQ</a><a class="lang-link" href="../zh/" lang="zh-CN">中文</a><a class="nav-cta" href="../download/">Download</a></nav></div></header>
+  <main id="main">
+    <section class="page-hero"><div class="shell"><p class="eyebrow">Measured, not marketed</p><h1>Desktop convenience has more than one shape.</h1><p class="lede">This project optimizes for a small desktop package and keeps the upstream Harness untouched. That is useful for developers with Node.js already installed, but it is not the only valid packaging choice.</p></div></section>
+    <section class="section"><div class="prose">
+      <h2>At a glance</h2>
+      <table>
+        <thead><tr><th>Dimension</th><th>Official Web UI</th><th>This Wails app</th><th>Bundled Electron wrapper</th></tr></thead>
+        <tbody>
+          <tr><td>Desktop window</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Typical package</td><td>npm package</td><td>3.8–9.8 MB</td><td>Roughly 110–190 MB*</td></tr>
+          <tr><td>Node.js preinstalled</td><td>Required</td><td>Required</td><td>Often not required</td></tr>
+          <tr><td>Browser runtime</td><td>Your browser</td><td>System WebView</td><td>Bundled Chromium</td></tr>
+          <tr><td>Upstream UI</td><td>Official</td><td>Official, unmodified</td><td>Varies by project</td></tr>
+          <tr><td>Desktop lifecycle</td><td>Manual CLI</td><td>Managed by Wails host</td><td>Managed by Electron host</td></tr>
+        </tbody>
+      </table>
+      <p><small>*Observed on 2026-08-14 from public release assets of <a href="https://github.com/dataelement/dsh-desktop/releases/tag/v0.1.1">dataelement/dsh-desktop v0.1.1</a> and <a href="https://github.com/steven-kid/deepseek-harness-desktop/releases/tag/v0.3.1">steven-kid/deepseek-harness-desktop v0.3.1</a>. Projects evolve; recheck their current releases before deciding.</small></p>
+      <h2>Choose this project when</h2>
+      <ul><li>You already have Node.js and npx.</li><li>You want macOS, Windows and Linux packages with a very small download.</li><li>You prefer a Go/Wails host that leaves the official DSH interface untouched.</li><li>You value transparent process management and a simple architecture.</li></ul>
+      <h2>Choose a bundled wrapper when</h2>
+      <ul><li>You need a one-click package that includes Node.js and DSH.</li><li>A 100+ MB download is an acceptable trade-off for a self-contained runtime.</li><li>You need desktop-specific features offered by another project, such as an installer, tray integration or automatic updates.</li></ul>
+      <h2>Use the official Web UI when</h2>
+      <p>You are comfortable running <code>dsh web</code> yourself and prefer the fewest possible layers. The official project remains the source of truth for Harness behavior.</p>
+      <div class="actions"><a class="button button-primary" href="../download/">Download this app</a><a class="button button-secondary" href="https://github.com/deepseek-ai/deepseek-harness">View official Harness</a></div>
+    </div></section>
+  </main>
+  <footer class="site-footer"><div class="shell footer-grid"><div><p class="footer-title">DeepSeek Harness Desktop</p><p class="footer-copy">A lightweight Wails host for developers who already have Node.js.</p></div><div class="footer-column"><strong>Project</strong><a href="../">Home</a><a href="../download/">Download</a></div><div class="footer-column"><strong>Learn</strong><a href="../architecture/">Architecture</a><a href="../security/">Security</a></div><div class="footer-column"><strong>Support</strong><a href="../faq/">FAQ</a><a href="../troubleshooting/">Troubleshooting</a></div></div></footer>
+</body>
+</html>

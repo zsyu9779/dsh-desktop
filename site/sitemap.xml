@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://zsyu9779.github.io/dsh-desktop/</loc>
+    <lastmod>2026-08-14</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://zsyu9779.github.io/dsh-desktop/"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://zsyu9779.github.io/dsh-desktop/zh/"/>
+  </url>
+  <url>
+    <loc>https://zsyu9779.github.io/dsh-desktop/zh/</loc>
+    <lastmod>2026-08-14</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://zsyu9779.github.io/dsh-desktop/"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://zsyu9779.github.io/dsh-desktop/zh/"/>
+  </url>
+  <url><loc>https://zsyu9779.github.io/dsh-desktop/download/</loc><lastmod>2026-08-14</lastmod></url>
+  <url><loc>https://zsyu9779.github.io/dsh-desktop/compare/</loc><lastmod>2026-08-14</lastmod></url>
+  <url><loc>https://zsyu9779.github.io/dsh-desktop/architecture/</loc><lastmod>2026-08-14</lastmod></url>
+  <url><loc>https://zsyu9779.github.io/dsh-desktop/security/</loc><lastmod>2026-08-14</lastmod></url>
+  <url><loc>https://zsyu9779.github.io/dsh-desktop/faq/</loc><lastmod>2026-08-14</lastmod></url>
+  <url><loc>https://zsyu9779.github.io/dsh-desktop/troubleshooting/</loc><lastmod>2026-08-14</lastmod></url>
+  <url><loc>https://zsyu9779.github.io/dsh-desktop/releases/v0.1.4/</loc><lastmod>2026-08-14</lastmod></url>
+</urlset>

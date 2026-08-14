@@ -1,0 +1,12 @@
+{
+  "name": "DeepSeek Harness Desktop",
+  "short_name": "DSH Desktop",
+  "description": "Lightweight Wails desktop shell for DeepSeek Harness.",
+  "start_url": "/dsh-desktop/",
+  "display": "browser",
+  "background_color": "#f4f3ed",
+  "theme_color": "#2457ff",
+  "icons": [
+    {"src": "/dsh-desktop/assets/icon.png", "sizes": "1024x1024", "type": "image/png"}
+  ]
+}

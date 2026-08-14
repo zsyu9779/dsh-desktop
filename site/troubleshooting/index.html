@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Troubleshoot DeepSeek Harness Desktop Startup</title>
+  <meta name="description" content="Fix Node.js, npx, first-launch, blank window, port, Gatekeeper and SmartScreen problems in DeepSeek Harness Desktop.">
+  <link rel="canonical" href="https://zsyu9779.github.io/dsh-desktop/troubleshooting/">
+  <link rel="icon" href="../assets/icon.png"><link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="shell nav"><a class="brand" href="../"><img src="../assets/icon.png" alt="" width="30" height="30"><span>DeepSeek Harness Desktop</span></a><nav class="nav-links" aria-label="Primary navigation"><a href="../compare/">Compare</a><a href="../architecture/">Architecture</a><a href="../security/">Security</a><a href="../faq/">FAQ</a><a class="lang-link" href="../zh/" lang="zh-CN">中文</a><a class="nav-cta" href="../download/">Download</a></nav></div></header>
+  <main id="main">
+    <section class="page-hero"><div class="shell"><p class="eyebrow">Troubleshooting</p><h1>Start with the environment, then read the log.</h1><p class="lede">Most first-launch failures come from Node.js discovery, npm connectivity or operating-system trust prompts.</p></div></section>
+    <section class="section"><div class="prose">
+      <h2>1. Verify Node.js and npx</h2><pre class="code-block">node --version
+npx --version</pre><p>Install Node.js 18 or later if either command fails. If Node was installed while the app was open, quit and restart the app so it can see the updated environment.</p>
+      <h2>2. Allow the first download to finish</h2><p>The first start downloads the pinned DSH package and can take longer than later launches. Check npm registry access, proxy settings and local firewall rules.</p>
+      <h2>3. Read the desktop log</h2><pre class="code-block">~/.dsh-desktop/logs/dsh.log</pre><p>Include the relevant section when reporting a bug, but remove API keys, tokens, home-directory names or other sensitive information first.</p>
+      <h2>4. macOS blocks the app</h2><p>Right-click the app and choose Open. If you intentionally remove the quarantine attribute, first verify the download source.</p><pre class="code-block">xattr -d com.apple.quarantine "/Applications/dsh-desktop.app"</pre>
+      <h2>5. Windows shows SmartScreen</h2><p>The v0.1.4 executable is unsigned. Use “More info” only if you downloaded it from this project's GitHub Releases page and accept that trust model.</p>
+      <h2>6. Port 3080 is already used</h2><p>No action is normally required. The app automatically tries another available local port.</p>
+      <h2>7. Report a reproducible issue</h2><p>Include the desktop version, operating system and architecture, Node.js version, exact steps, expected result, actual result and sanitized log output in a <a href="https://github.com/zsyu9779/dsh-desktop/issues">GitHub issue</a>.</p>
+    </div></section>
+  </main>
+  <footer class="site-footer"><div class="shell footer-grid"><div><p class="footer-title">DeepSeek Harness Desktop</p><p class="footer-copy">The startup screen and log are designed to make failures actionable.</p></div><div class="footer-column"><strong>Project</strong><a href="../">Home</a><a href="../download/">Download</a></div><div class="footer-column"><strong>Learn</strong><a href="../architecture/">Architecture</a><a href="../security/">Security</a></div><div class="footer-column"><strong>Support</strong><a href="../faq/">FAQ</a><a href="https://github.com/zsyu9779/dsh-desktop/issues">Issues</a></div></div></footer>
+</body>
+</html>

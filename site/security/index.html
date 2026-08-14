@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DeepSeek Harness Desktop Security and Data Boundaries</title>
+  <meta name="description" content="Security, local network exposure, data ownership, code signing status and trust boundaries in DeepSeek Harness Desktop.">
+  <link rel="canonical" href="https://zsyu9779.github.io/dsh-desktop/security/">
+  <link rel="icon" href="../assets/icon.png"><link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="shell nav"><a class="brand" href="../"><img src="../assets/icon.png" alt="" width="30" height="30"><span>DeepSeek Harness Desktop</span></a><nav class="nav-links" aria-label="Primary navigation"><a href="../compare/">Compare</a><a href="../architecture/">Architecture</a><a href="./">Security</a><a href="../faq/">FAQ</a><a class="lang-link" href="../zh/" lang="zh-CN">中文</a><a class="nav-cta" href="../download/">Download</a></nav></div></header>
+  <main id="main">
+    <section class="page-hero"><div class="shell"><p class="eyebrow">Security notes</p><h1>Know which layer you are trusting.</h1><p class="lede">This page documents the desktop shell's boundaries. DeepSeek Harness has its own permissions, credentials and sandbox behavior; consult the upstream project for those controls.</p></div></section>
+    <section class="section"><div class="prose">
+      <h2>Local service exposure</h2>
+      <p>The desktop app starts DSH on a loopback address and loads it locally. It does not intentionally expose the service to the LAN. Port 3080 is preferred; another available local port is selected when necessary.</p>
+      <h2>What the desktop shell can access</h2>
+      <p>The Go host starts a local process, opens the embedded Web UI, reads startup output and writes its own log. Project files, tools, model credentials, sessions and plugins are managed by the upstream Harness runtime rather than reimplemented by this shell.</p>
+      <h2>Data locations</h2>
+      <table><thead><tr><th>Data</th><th>Owner / location</th></tr></thead><tbody><tr><td>Desktop startup log</td><td><code>~/.dsh-desktop/logs/dsh.log</code></td></tr><tr><td>Harness profiles and sessions</td><td>Managed by DSH; configurable through <code>DSH_HOME</code></td></tr><tr><td>npm download cache</td><td>Application-specific cache used for the pinned DSH package</td></tr></tbody></table>
+      <h2>Current signing status</h2>
+      <div class="callout"><strong>v0.1.4 is not code-signed or notarized.</strong> macOS Gatekeeper and Windows SmartScreen may warn before launch. Download only from the project's GitHub Releases page and inspect the public source if this trust level is not acceptable.</div>
+      <h2>Network access</h2>
+      <p>The shell needs npm network access on first launch or when its package cache is empty. Model provider traffic is initiated by DeepSeek Harness according to the providers configured by the user.</p>
+      <h2>Reporting a vulnerability</h2>
+      <p>Do not publish sensitive exploit details in a public issue. Until a dedicated private reporting channel is configured, open a minimal GitHub issue asking the maintainer for a private contact path.</p>
+      <h2>Non-affiliation</h2>
+      <p>This is an unofficial community project. It is not developed, endorsed or supported by DeepSeek AI.</p>
+    </div></section>
+  </main>
+  <footer class="site-footer"><div class="shell footer-grid"><div><p class="footer-title">DeepSeek Harness Desktop</p><p class="footer-copy">Transparent boundaries are part of the product.</p></div><div class="footer-column"><strong>Project</strong><a href="../">Home</a><a href="../download/">Download</a></div><div class="footer-column"><strong>Learn</strong><a href="../compare/">Compare</a><a href="../architecture/">Architecture</a></div><div class="footer-column"><strong>Support</strong><a href="../faq/">FAQ</a><a href="https://github.com/zsyu9779/dsh-desktop/issues">Issues</a></div></div></footer>
+</body>
+</html>

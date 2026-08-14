@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download DeepSeek Harness Desktop for macOS, Windows & Linux</title>
+  <meta name="description" content="Download DeepSeek Harness Desktop v0.1.4 for macOS, Windows or Linux. Lightweight Wails packages from 3.8 MB to 9.8 MB.">
+  <link rel="canonical" href="https://zsyu9779.github.io/dsh-desktop/download/">
+  <link rel="icon" href="../assets/icon.png">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="shell nav">
+    <a class="brand" href="../"><img src="../assets/icon.png" alt="" width="30" height="30"><span>DeepSeek Harness Desktop</span></a>
+    <nav class="nav-links" aria-label="Primary navigation"><a href="../compare/">Compare</a><a href="../architecture/">Architecture</a><a href="../security/">Security</a><a href="../faq/">FAQ</a><a class="lang-link" href="../zh/" lang="zh-CN">中文</a><a class="nav-cta" href="./">Download</a></nav>
+  </div></header>
+  <main id="main">
+    <section class="page-hero"><div class="shell">
+      <p class="eyebrow">Release v0.1.4</p>
+      <h1>Download the lightweight DeepSeek Harness desktop app.</h1>
+      <p class="lede">Choose your platform below. Every package is built from the public repository by GitHub Actions and requires Node.js 18 or later.</p>
+    </div></section>
+    <section class="section"><div class="shell">
+      <div class="download-grid">
+        <article class="download-card"><span class="platform">macOS</span><h3>Universal DMG</h3><p>Apple Silicon + Intel · 8.1 MB · unsigned</p><a class="button button-primary" href="https://github.com/zsyu9779/dsh-desktop/releases/latest/download/dsh-desktop-darwin-universal.dmg">Download DMG</a></article>
+        <article class="download-card"><span class="platform">Windows</span><h3>Portable EXE</h3><p>Windows amd64 · 9.8 MB · unsigned</p><a class="button button-primary" href="https://github.com/zsyu9779/dsh-desktop/releases/latest/download/dsh-desktop.exe">Download EXE</a></article>
+        <article class="download-card"><span class="platform">Linux</span><h3>amd64 archive</h3><p>Linux amd64 · 3.8 MB · tar.gz</p><a class="button button-primary" href="https://github.com/zsyu9779/dsh-desktop/releases/latest/download/dsh-desktop-linux-amd64.tar.gz">Download tar.gz</a></article>
+      </div>
+      <div class="prose">
+        <h2>Before you install</h2>
+        <p>Install <a href="https://nodejs.org/">Node.js 18 or later</a> and verify that both <code>node</code> and <code>npx</code> are available. The desktop app uses npx to download and start the pinned <code>@deepseek-ai/dsh@0.1.0-rc.6</code> package.</p>
+        <h2>macOS</h2>
+        <p>Open the DMG and drag the app into Applications. The current build is not notarized. If Gatekeeper blocks it, right-click the app and choose Open, or remove the quarantine attribute only after verifying that the package came from this repository.</p>
+        <pre class="code-block">xattr -d com.apple.quarantine "/Applications/dsh-desktop.app"</pre>
+        <h2>Windows</h2>
+        <p>Run <code>dsh-desktop.exe</code>. The current executable is not commercially code-signed, so SmartScreen may display an unknown publisher warning.</p>
+        <h2>Linux</h2>
+        <p>Extract the archive and run <code>dsh-desktop</code>. Your distribution must provide the WebKitGTK libraries used by Wails.</p>
+        <h2>All release artifacts</h2>
+        <p>Historical versions and the macOS ZIP are available on the <a href="https://github.com/zsyu9779/dsh-desktop/releases">GitHub Releases page</a>.</p>
+      </div>
+    </div></section>
+  </main>
+  <footer class="site-footer"><div class="shell footer-grid"><div><p class="footer-title">DeepSeek Harness Desktop</p><p class="footer-copy">Unofficial community project. MIT licensed.</p></div><div class="footer-column"><strong>Project</strong><a href="../">Home</a><a href="https://github.com/zsyu9779/dsh-desktop">GitHub</a></div><div class="footer-column"><strong>Learn</strong><a href="../compare/">Compare</a><a href="../architecture/">Architecture</a></div><div class="footer-column"><strong>Support</strong><a href="../faq/">FAQ</a><a href="../troubleshooting/">Troubleshooting</a></div></div></footer>
+</body>
+</html>

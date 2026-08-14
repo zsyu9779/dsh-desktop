@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DeepSeek Harness Desktop Architecture — Wails, Go and DSH Web UI</title>
+  <meta name="description" content="How DeepSeek Harness Desktop uses Wails and Go to launch, host and cleanly stop the official DSH Web UI.">
+  <link rel="canonical" href="https://zsyu9779.github.io/dsh-desktop/architecture/">
+  <link rel="icon" href="../assets/icon.png"><link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="shell nav"><a class="brand" href="../"><img src="../assets/icon.png" alt="" width="30" height="30"><span>DeepSeek Harness Desktop</span></a><nav class="nav-links" aria-label="Primary navigation"><a href="../compare/">Compare</a><a href="./">Architecture</a><a href="../security/">Security</a><a href="../faq/">FAQ</a><a class="lang-link" href="../zh/" lang="zh-CN">中文</a><a class="nav-cta" href="../download/">Download</a></nav></div></header>
+  <main id="main">
+    <section class="page-hero"><div class="shell"><p class="eyebrow">Architecture</p><h1>A desktop host around an upstream runtime.</h1><p class="lede">The project does not reimplement DeepSeek Harness. It starts a pinned upstream package, waits for its local web service and loads that service inside a Wails WebView.</p></div></section>
+    <section class="section"><div class="prose">
+      <h2>Runtime structure</h2>
+      <pre class="code-block">DeepSeek Harness Desktop (Wails / Go)
+├── native window and application lifecycle
+├── environment checks and local log
+├── loopback port selection and readiness probe
+└── npx @deepseek-ai/dsh@0.1.0-rc.6 web
+    └── node / dsh
+        └── official Web UI on 127.0.0.1:&lt;port&gt;</pre>
+      <h2>Startup sequence</h2>
+      <ol><li>Locate Node.js and npx on the user's machine.</li><li>Select port 3080 or another available loopback port.</li><li>Start the pinned <code>@deepseek-ai/dsh</code> package with an application-specific npm cache.</li><li>Probe the local HTTP endpoint until it becomes ready.</li><li>Load the official Web UI inside the preserved Wails window.</li><li>Show startup status and logs if the runtime cannot become ready.</li></ol>
+      <h2>Shutdown sequence</h2>
+      <p>On a normal application exit, the host terminates the complete process group or process tree created by <code>npx → node → dsh</code>. Platform-specific implementations handle Unix-like systems and Windows separately.</p>
+      <h2>Ownership boundary</h2>
+      <table><thead><tr><th>Desktop host owns</th><th>DeepSeek Harness owns</th></tr></thead><tbody><tr><td>Native window</td><td>Agent loop and tools</td></tr><tr><td>Environment checks</td><td>Models and credentials</td></tr><tr><td>Port and readiness</td><td>Sessions and profiles</td></tr><tr><td>Logs and process cleanup</td><td>Plugins, skills and interface</td></tr></tbody></table>
+      <h2>Why Wails?</h2>
+      <p>Wails pairs a Go host with the operating system WebView. The project therefore does not ship a separate Chromium runtime. This keeps the desktop package small, while making the application dependent on the platform WebView and a preinstalled Node.js runtime.</p>
+      <div class="actions"><a class="button button-primary" href="https://github.com/zsyu9779/dsh-desktop">Read the source</a><a class="button button-secondary" href="../security/">Security model</a></div>
+    </div></section>
+  </main>
+  <footer class="site-footer"><div class="shell footer-grid"><div><p class="footer-title">DeepSeek Harness Desktop</p><p class="footer-copy">The desktop host stays intentionally shallow.</p></div><div class="footer-column"><strong>Project</strong><a href="../">Home</a><a href="../download/">Download</a></div><div class="footer-column"><strong>Learn</strong><a href="../compare/">Compare</a><a href="../security/">Security</a></div><div class="footer-column"><strong>Support</strong><a href="../faq/">FAQ</a><a href="../troubleshooting/">Troubleshooting</a></div></div></footer>
+</body>
+</html>

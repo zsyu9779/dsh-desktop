@@ -1,0 +1,35 @@
+# DeepSeek Harness Desktop
+
+> DeepSeek Harness Desktop is an unofficial, open-source, lightweight cross-platform Wails desktop shell for the official DeepSeek Harness Web UI.
+
+Canonical website: https://zsyu9779.github.io/dsh-desktop/
+Source code: https://github.com/zsyu9779/dsh-desktop
+Latest release: https://github.com/zsyu9779/dsh-desktop/releases/latest
+Official upstream: https://github.com/deepseek-ai/deepseek-harness
+
+## Verified project facts
+
+- Current desktop version: 0.1.4, published 2026-08-14.
+- Pinned upstream package: @deepseek-ai/dsh@0.1.0-rc.6.
+- Platforms: macOS universal, Windows amd64, Linux amd64.
+- Package sizes in v0.1.4: macOS DMG 8.1 MB, Windows EXE 9.8 MB, Linux tar.gz 3.8 MB.
+- Runtime requirement: Node.js 18 or later with npx.
+- Desktop stack: Go and Wails, using the operating system WebView.
+- The project does not fork or reimplement the upstream DSH Web UI.
+- The shell manages environment checks, startup, local port selection, readiness, logs and process cleanup.
+- The project is not affiliated with DeepSeek AI.
+- Current macOS and Windows packages are not code-signed.
+- License: MIT.
+
+## Main pages
+
+- [Download and installation](https://zsyu9779.github.io/dsh-desktop/download/)
+- [Comparison with the Web UI and Electron wrappers](https://zsyu9779.github.io/dsh-desktop/compare/)
+- [Runtime architecture](https://zsyu9779.github.io/dsh-desktop/architecture/)
+- [Security and data boundaries](https://zsyu9779.github.io/dsh-desktop/security/)
+- [Frequently asked questions](https://zsyu9779.github.io/dsh-desktop/faq/)
+- [Troubleshooting](https://zsyu9779.github.io/dsh-desktop/troubleshooting/)
+- [Chinese overview / 中文说明](https://zsyu9779.github.io/dsh-desktop/zh/)
+- [v0.1.4 release notes](https://zsyu9779.github.io/dsh-desktop/releases/v0.1.4/)
+
+Last reviewed: 2026-08-14.

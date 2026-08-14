@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+Sitemap: https://zsyu9779.github.io/dsh-desktop/sitemap.xml

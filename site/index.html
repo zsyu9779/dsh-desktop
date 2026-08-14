@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DeepSeek Harness Desktop — Lightweight Wails App for macOS, Windows & Linux</title>
+  <meta name="description" content="An unofficial, lightweight cross-platform desktop app for DeepSeek Harness. Native Wails shell, under 10 MB, available for macOS, Windows and Linux.">
+  <link rel="canonical" href="https://zsyu9779.github.io/dsh-desktop/">
+  <link rel="alternate" hreflang="en" href="https://zsyu9779.github.io/dsh-desktop/">
+  <link rel="alternate" hreflang="zh-CN" href="https://zsyu9779.github.io/dsh-desktop/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://zsyu9779.github.io/dsh-desktop/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="DeepSeek Harness Desktop — Lightweight by design">
+  <meta property="og:description" content="A 4–10 MB Wails desktop shell for the official DeepSeek Harness Web UI on macOS, Windows and Linux.">
+  <meta property="og:url" content="https://zsyu9779.github.io/dsh-desktop/">
+  <meta property="og:image" content="https://zsyu9779.github.io/dsh-desktop/assets/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="DeepSeek Harness Desktop — Lightweight by design">
+  <meta name="twitter:description" content="A 4–10 MB Wails desktop shell for DeepSeek Harness on macOS, Windows and Linux.">
+  <meta name="twitter:image" content="https://zsyu9779.github.io/dsh-desktop/assets/og.png">
+  <link rel="icon" href="assets/icon.png">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="stylesheet" href="assets/site.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "DeepSeek Harness Desktop",
+    "alternateName": "DSH Desktop",
+    "description": "Unofficial lightweight cross-platform Wails desktop shell for the official DeepSeek Harness Web UI.",
+    "applicationCategory": "DeveloperApplication",
+    "applicationSubCategory": "AI coding agent desktop client",
+    "operatingSystem": ["macOS", "Windows", "Linux"],
+    "softwareVersion": "0.1.4",
+    "isAccessibleForFree": true,
+    "license": "https://opensource.org/license/mit",
+    "codeRepository": "https://github.com/zsyu9779/dsh-desktop",
+    "downloadUrl": "https://github.com/zsyu9779/dsh-desktop/releases/latest",
+    "url": "https://zsyu9779.github.io/dsh-desktop/",
+    "author": {
+      "@type": "Person",
+      "name": "Jayden Zhang",
+      "url": "https://github.com/zsyu9779"
+    },
+    "isBasedOn": "https://github.com/deepseek-ai/deepseek-harness",
+    "softwareRequirements": "Node.js 18 or later"
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="shell nav">
+      <a class="brand" href="./" aria-label="DeepSeek Harness Desktop home">
+        <img src="assets/icon.png" alt="" width="30" height="30">
+        <span>DeepSeek Harness Desktop</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="compare/">Compare</a>
+        <a href="architecture/">Architecture</a>
+        <a href="security/">Security</a>
+        <a href="faq/">FAQ</a>
+        <a class="lang-link" href="zh/" lang="zh-CN">中文</a>
+        <a class="nav-cta" href="download/">Download</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="shell hero">
+      <div>
+        <p class="eyebrow">Unofficial community project</p>
+        <h1>Harness power.<br><em>Desktop weight.</em></h1>
+        <p class="lede">A lightweight Wails desktop shell for the official DeepSeek Harness Web UI. Native window, managed lifecycle, and three-platform releases—without a bundled browser runtime.</p>
+        <div class="actions">
+          <a class="button button-primary" href="download/">Download v0.1.4</a>
+          <a class="button button-secondary" href="https://github.com/zsyu9779/dsh-desktop">View source</a>
+        </div>
+        <p class="microcopy">Requires Node.js 18+ · MIT licensed · Not affiliated with DeepSeek</p>
+      </div>
+
+      <div class="window" aria-label="Architecture preview showing the desktop app starting DeepSeek Harness">
+        <div class="window-bar">
+          <span class="dot dot-red"></span>
+          <span class="dot dot-yellow"></span>
+          <span class="dot dot-green"></span>
+          <span class="window-title">dsh-desktop — local</span>
+        </div>
+        <div class="window-body">
+          <p class="terminal-line"><strong>●</strong> checking <span class="blue">node</span> and <span class="blue">npx</span></p>
+          <p class="terminal-line"><strong>●</strong> starting @deepseek-ai/dsh@0.1.0-rc.6</p>
+          <p class="terminal-line"><strong>●</strong> ready on 127.0.0.1:3080</p>
+          <div class="window-card">
+            <span class="window-card-label">Desktop host</span>
+            <h2>Everything is still a plugin.</h2>
+            <p>The interface and agent runtime remain upstream. This app owns the native window, startup, logs, port selection and shutdown.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="proof" aria-label="Project facts">
+      <div class="shell proof-grid">
+        <div class="proof-item"><strong>4–10 MB</strong><span>release packages</span></div>
+        <div class="proof-item"><strong>3</strong><span>desktop platforms</span></div>
+        <div class="proof-item"><strong>Wails + Go</strong><span>native host stack</span></div>
+        <div class="proof-item"><strong>0</strong><span>forked upstream UI</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-head">
+          <span class="section-kicker">Why it exists</span>
+          <div>
+            <h2>The official experience, minus the browser choreography.</h2>
+            <p class="section-intro">DeepSeek Harness already ships a capable Web UI. This project gives it a native home and handles the repetitive desktop work around it.</p>
+          </div>
+        </div>
+        <div class="cards">
+          <article class="card">
+            <span class="card-number">01 / LAUNCH</span>
+            <h3>Open one app</h3>
+            <p>Checks your local Node.js environment, starts the pinned DSH package, waits for readiness, then loads the UI.</p>
+          </article>
+          <article class="card">
+            <span class="card-number">02 / CONTAIN</span>
+            <h3>Keep it local</h3>
+            <p>Uses a loopback address and chooses another local port if 3080 is already occupied.</p>
+          </article>
+          <article class="card">
+            <span class="card-number">03 / CLEAN UP</span>
+            <h3>Close cleanly</h3>
+            <p>Terminates the complete npx → node → dsh process tree when the desktop app exits normally.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-blue">
+      <div class="shell split">
+        <div>
+          <span class="section-kicker">A deliberate trade-off</span>
+          <h2>Small download. Existing runtime.</h2>
+        </div>
+        <div>
+          <p class="section-intro">The app uses the operating system WebView and downloads the pinned DSH package through npx. That keeps the desktop package below 10 MB, but means Node.js 18+ must already be installed.</p>
+          <div class="actions">
+            <a class="button button-secondary" href="compare/">See the comparison</a>
+            <a class="button button-secondary" href="architecture/">Read the architecture</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-head">
+          <span class="section-kicker">Download</span>
+          <div>
+            <h2>One release. Three platforms.</h2>
+            <p class="section-intro">Version 0.1.4 wraps <code>@deepseek-ai/dsh@0.1.0-rc.6</code>. Packages are built by GitHub Actions from the public source.</p>
+          </div>
+        </div>
+        <div class="download-grid">
+          <article class="download-card">
+            <span class="platform">macOS</span>
+            <h3>Universal DMG</h3>
+            <p>Apple Silicon and Intel in one 8.1 MB disk image. Currently unsigned.</p>
+            <a class="button button-secondary" href="https://github.com/zsyu9779/dsh-desktop/releases/latest/download/dsh-desktop-darwin-universal.dmg">Download DMG</a>
+          </article>
+          <article class="download-card">
+            <span class="platform">Windows</span>
+            <h3>Portable EXE</h3>
+            <p>A 9.8 MB executable for Windows amd64. Currently unsigned.</p>
+            <a class="button button-secondary" href="https://github.com/zsyu9779/dsh-desktop/releases/latest/download/dsh-desktop.exe">Download EXE</a>
+          </article>
+          <article class="download-card">
+            <span class="platform">Linux</span>
+            <h3>amd64 tar.gz</h3>
+            <p>A 3.8 MB archive for Linux amd64. Requires common WebKitGTK dependencies.</p>
+            <a class="button button-secondary" href="https://github.com/zsyu9779/dsh-desktop/releases/latest/download/dsh-desktop-linux-amd64.tar.gz">Download tar.gz</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-dark">
+      <div class="shell split">
+        <div>
+          <span class="section-kicker">Architecture in one glance</span>
+          <h2>A host, not a harness fork.</h2>
+          <p class="section-intro">Model settings, sessions, plugins and agent behavior remain the responsibility of the official DeepSeek Harness runtime.</p>
+        </div>
+        <div>
+          <pre class="code-block" aria-label="Runtime architecture diagram">DeepSeek Harness Desktop (Wails / Go)
+└── npx @deepseek-ai/dsh web
+    └── node / dsh
+        └── Web UI on 127.0.0.1
+
+Desktop owns:
+window · launch · logs · shutdown</pre>
+          <p class="callout"><strong>Important:</strong> This is an independent community project. It is not an official DeepSeek product and is not affiliated with DeepSeek AI.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="shell cta-band">
+      <h2>Put the official Harness in a lightweight native window.</h2>
+      <a class="button button-primary" href="download/">Choose your platform</a>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-grid">
+      <div>
+        <p class="footer-title">DeepSeek Harness Desktop</p>
+        <p class="footer-copy">Unofficial, open-source and intentionally small. Built with Wails and Go around the official DeepSeek Harness Web UI.</p>
+      </div>
+      <div class="footer-column">
+        <strong>Project</strong>
+        <a href="download/">Download</a>
+        <a href="releases/v0.1.4/">v0.1.4 notes</a>
+        <a href="https://github.com/zsyu9779/dsh-desktop">GitHub</a>
+      </div>
+      <div class="footer-column">
+        <strong>Learn</strong>
+        <a href="compare/">Compare</a>
+        <a href="architecture/">Architecture</a>
+        <a href="security/">Security</a>
+      </div>
+      <div class="footer-column">
+        <strong>Support</strong>
+        <a href="faq/">FAQ</a>
+        <a href="troubleshooting/">Troubleshooting</a>
+        <a href="https://github.com/zsyu9779/dsh-desktop/issues">Issues</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

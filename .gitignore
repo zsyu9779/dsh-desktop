@@ -1,6 +1,7 @@
 build/bin
 node_modules
 frontend/dist
+.DS_Store
 
 # compiled binaries from `go build` (named after the module)
 /dsh-desktop
