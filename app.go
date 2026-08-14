@@ -22,6 +22,7 @@ func NewApp() *App {
 // startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	enableNativeFullscreen()
 	a.dsh.start()
 }
 
