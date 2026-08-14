@@ -8,3 +8,4 @@ User-agent: PerplexityBot
 Allow: /
 
 Sitemap: https://zsyu9779.github.io/dsh-desktop/sitemap.xml
+Sitemap: https://zsyu9779.github.io/dsh-desktop/sitemap.txt
