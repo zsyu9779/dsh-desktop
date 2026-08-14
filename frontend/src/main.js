@@ -9,6 +9,11 @@ const spinner = document.getElementById('spinner');
 const progress = document.getElementById('progress');
 const actions = document.getElementById('actions');
 const logsEl = document.getElementById('logs');
+const splash = document.getElementById('splash');
+const harnessFrame = document.getElementById('harness-frame');
+
+let harnessURL = '';
+let enteringHarness = false;
 
 function setBusy(busy) {
     spinner.classList.toggle('hidden', !busy);
@@ -19,6 +24,29 @@ function setActionsVisible(visible) {
     actions.hidden = !visible;
 }
 
+function showHarness(url) {
+    if (!url || enteringHarness) return;
+
+    enteringHarness = true;
+    harnessURL = url;
+    harnessFrame.addEventListener('load', () => {
+        harnessFrame.hidden = false;
+        splash.hidden = true;
+    }, { once: true });
+    harnessFrame.src = url;
+}
+
+// WKWebView can occasionally restore a stale compositor surface after a
+// minimise/unminimise cycle. Keeping the Wails document as the top-level page
+// preserves the runtime bindings; touching the iframe layer requests a repaint
+// without reloading DSH or losing its in-memory UI state.
+function refreshHarnessLayer() {
+    if (!harnessURL || harnessFrame.hidden) return;
+    harnessFrame.classList.remove('repaint');
+    void harnessFrame.offsetWidth;
+    harnessFrame.classList.add('repaint');
+}
+
 function handleStatus(s) {
     if (!s) return;
 
@@ -27,8 +55,8 @@ function handleStatus(s) {
             statusText.textContent = s.message || 'DeepSeek Harness 已就绪，正在进入…';
             setBusy(false);
             setActionsVisible(false);
-            // Briefly let the "ready" state paint before handing off the window.
-            setTimeout(() => window.location.replace(s.url), 300);
+            // Briefly let the "ready" state paint before revealing the embedded UI.
+            setTimeout(() => showHarness(s.url), 300);
             break;
 
         case 'starting':
@@ -61,3 +89,9 @@ document.getElementById('btn-logs').addEventListener('click', async () => {
 
 runtime.EventsOn('status', handleStatus);
 App.Status().then(handleStatus).catch((err) => console.error(err));
+
+window.addEventListener('focus', refreshHarnessLayer);
+window.addEventListener('pageshow', refreshHarnessLayer);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshHarnessLayer();
+});

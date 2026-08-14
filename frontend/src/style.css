@@ -20,6 +20,10 @@ body,
     height: 100%;
 }
 
+#app {
+    position: relative;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
         "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
@@ -29,6 +33,24 @@ body {
     overflow: hidden;
     user-select: none;
     -webkit-user-select: none;
+}
+
+.harness-frame {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: var(--bg);
+}
+
+.harness-frame[hidden] {
+    display: none;
+}
+
+.harness-frame.repaint {
+    transform: translateZ(0);
 }
 
 .splash {

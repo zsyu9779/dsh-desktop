@@ -55,6 +55,9 @@ type dshManager struct {
 	stopping atomic.Bool
 
 	mu      sync.Mutex
+	running bool
+	cancel  context.CancelFunc
+	runDone chan struct{}
 	cmd     *exec.Cmd
 	done    chan struct{} // closed exactly once when the process exits
 	exitErr error         // set before done is closed
@@ -98,12 +101,31 @@ func (m *dshManager) setStatus(state, message string) {
 // start launches the harness in the background if it is not already running.
 func (m *dshManager) start() {
 	m.mu.Lock()
-	running := m.cmd != nil
-	m.mu.Unlock()
-	if running {
+	if m.running {
+		m.mu.Unlock()
 		return
 	}
-	go m.run()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	m.stopping.Store(false)
+	m.running = true
+	m.cancel = cancel
+	m.runDone = done
+	m.mu.Unlock()
+
+	go func() {
+		defer func() {
+			m.mu.Lock()
+			if m.runDone == done {
+				m.running = false
+				m.cancel = nil
+				m.runDone = nil
+			}
+			m.mu.Unlock()
+			close(done)
+		}()
+		m.run(ctx)
+	}()
 }
 
 // restart stops any running instance and starts a fresh one.
@@ -118,49 +140,58 @@ func (m *dshManager) stop() {
 	m.stopping.Store(true)
 
 	m.mu.Lock()
+	cancel := m.cancel
 	cmd := m.cmd
 	done := m.done
+	runDone := m.runDone
 	m.mu.Unlock()
 
-	if cmd == nil || cmd.Process == nil {
-		return
+	if cmd != nil && cmd.Process != nil {
+		// Terminate the whole process tree (npx -> node -> dsh), not just npx.
+		// Signal the group before cancelling CommandContext, whose default kill
+		// targets only the immediate npx process.
+		terminateProcessTree(cmd, false)
+	}
+	if cancel != nil {
+		cancel()
 	}
 
-	// Terminate the whole process tree (npx -> node -> dsh), not just npx.
-	terminateProcessTree(cmd, false)
-
-	if done == nil {
-		return
+	if cmd != nil && cmd.Process != nil {
+		if done != nil {
+			select {
+			case <-done:
+			case <-time.After(killGrace):
+				terminateProcessTree(cmd, true)
+				<-done
+			}
+		}
 	}
-	select {
-	case <-done:
-	case <-time.After(killGrace):
-		terminateProcessTree(cmd, true)
-		<-done
+
+	// Wait for startup work to observe cancellation too. This closes the race
+	// where the window is closed just before the command handle is published.
+	if runDone != nil {
+		select {
+		case <-runDone:
+		case <-time.After(killGrace):
+		}
 	}
 }
 
-// run performs the actual launch: check env, warm up, pick a port, spawn dsh,
-// wait for readiness.
-func (m *dshManager) run() {
-	m.stopping.Store(false)
-
+// run performs the actual launch: check env, pick a port, spawn dsh, and wait
+// for readiness. Its context is cancelled when the window or app closes.
+func (m *dshManager) run(ctx context.Context) {
 	// 1) Environment check: Node.js / npx must be present.
 	m.setStatus("starting", "正在检查环境…")
 	if err := m.checkEnvironment(); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		m.fail(err)
 		return
 	}
 
-	// 2) Pre-install / warm-up: pre-download the dsh package on first run.
-	m.setStatus("starting", "正在准备 DeepSeek Harness（首次运行需下载依赖，请稍候）…")
-	if err := m.warmUp(); err != nil {
-		m.fail(fmt.Errorf("下载 DeepSeek Harness 失败，请检查网络后重试: %w", err))
-		return
-	}
-
-	// 3) Launch + readiness.
-	m.setStatus("starting", "正在启动 DeepSeek Harness…")
+	// 2) Launch + readiness. npx downloads the pinned package on first run.
+	m.setStatus("starting", "正在启动 DeepSeek Harness…（首次运行需下载依赖，请稍候）")
 
 	port, err := findPort()
 	if err != nil {
@@ -168,7 +199,7 @@ func (m *dshManager) run() {
 		return
 	}
 
-	cmd, err := m.buildCommand(port)
+	cmd, err := m.buildCommand(ctx, port)
 	if err != nil {
 		m.fail(fmt.Errorf("无法创建进程: %w", err))
 		return
@@ -188,6 +219,9 @@ func (m *dshManager) run() {
 	configureSysProcAttr(cmd)
 
 	if err := cmd.Start(); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		m.fail(fmt.Errorf("启动 dsh 失败: %w", err))
 		return
 	}
@@ -214,9 +248,6 @@ func (m *dshManager) run() {
 		close(done)
 	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	readyCh := m.waitReady(ctx, port)
 
 	select {
@@ -230,6 +261,10 @@ func (m *dshManager) run() {
 		if !m.stopping.Load() {
 			m.fail(fmt.Errorf("DeepSeek Harness 启动过程中退出: %v", m.exitError()))
 		}
+		return
+	case <-ctx.Done():
+		<-done
+		m.markStopped()
 		return
 	}
 
@@ -325,7 +360,7 @@ func (m *dshManager) pump(r io.Reader) {
 }
 
 // buildCommand constructs the dsh launcher command.
-func (m *dshManager) buildCommand(port int) (*exec.Cmd, error) {
+func (m *dshManager) buildCommand(ctx context.Context, port int) (*exec.Cmd, error) {
 	portStr := fmt.Sprintf("%d", port)
 	webArgs := []string{"web", "--host", "127.0.0.1", "--port", portStr, "--trusted-host", "127.0.0.1"}
 
@@ -348,7 +383,7 @@ func (m *dshManager) buildCommand(port int) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("未找到 %q，请先安装 Node.js（需要 npx）: %w", bin, err)
 	}
 
-	cmd := exec.Command(binPath, args...)
+	cmd := exec.CommandContext(ctx, binPath, args...)
 
 	// Working directory: the user's project, overridable via DSH_WORKSPACE.
 	if wd := workspaceDir(); wd != "" {
@@ -358,6 +393,9 @@ func (m *dshManager) buildCommand(port int) (*exec.Cmd, error) {
 	// Extend PATH so npx's `#!/usr/bin/env node` shebang and any subprocesses
 	// (pnpm, node) resolve from the same Node.js installation.
 	cmd.Env = augmentedEnv()
+	if bin == "npx" {
+		cmd.Env = withEnv(cmd.Env, "NPM_CONFIG_CACHE", managedNPMCacheDir())
+	}
 	return cmd, nil
 }
 
@@ -447,6 +485,35 @@ func augmentedEnv() []string {
 	return out
 }
 
+// withEnv returns env with key replaced by value.
+func withEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env)+1)
+	replaced := false
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			out = append(out, prefix+value)
+			replaced = true
+		} else {
+			out = append(out, kv)
+		}
+	}
+	if !replaced {
+		out = append(out, prefix+value)
+	}
+	return out
+}
+
+// managedNPMCacheDir isolates dsh-desktop from concurrent npm/npx clients and
+// stale shared _npx state, which can otherwise produce
+// "sh: dsh: command not found" even though the package is installed.
+func managedNPMCacheDir() string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".dsh-desktop", "npm-cache-v1")
+	}
+	return filepath.Join(os.TempDir(), "dsh-desktop-npm-cache-v1")
+}
+
 // workspaceDir returns the directory dsh should run in (DSH_WORKSPACE or home).
 func workspaceDir() string {
 	if wd := strings.TrimSpace(os.Getenv("DSH_WORKSPACE")); wd != "" {
@@ -470,33 +537,6 @@ func (m *dshManager) checkEnvironment() error {
 			m.logf("node: %s (%s)", nodePath, strings.TrimSpace(string(out)))
 		}
 	}
-	return nil
-}
-
-// warmUp pre-downloads the dsh package into the npx cache so the subsequent
-// `web` launch starts quickly, giving clearer first-run progress.
-func (m *dshManager) warmUp() error {
-	npxPath, err := findExecutable("npx")
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, npxPath, "-y", dshPackage, "--version")
-	cmd.Env = augmentedEnv()
-	if wd := workspaceDir(); wd != "" {
-		cmd.Dir = wd
-	}
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("下载超时")
-		}
-		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
-	}
-	m.logf("dsh version: %s", strings.TrimSpace(string(out)))
 	return nil
 }
 

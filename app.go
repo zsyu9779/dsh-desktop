@@ -30,8 +30,11 @@ func (a *App) shutdown(ctx context.Context) {
 	a.dsh.stop()
 }
 
-// beforeClose lets us always allow the window to close; cleanup runs in shutdown.
+// beforeClose stops the managed service before allowing the window to close.
+// On macOS, closing the last window does not necessarily terminate the app, so
+// relying on OnShutdown alone would leave npx/node/dsh running in the background.
 func (a *App) beforeClose(ctx context.Context) (prevent bool) {
+	a.dsh.stop()
 	return false
 }
 
