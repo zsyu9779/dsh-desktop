@@ -269,9 +269,15 @@ func (m *dshManager) run(ctx context.Context) {
 	}
 
 	m.setStatus("ready", "DeepSeek Harness 已就绪")
+	if m.app.notify != nil {
+		m.app.notify.start(m.url)
+	}
 
 	// Block until the process exits after we are ready.
 	<-done
+	if m.app.notify != nil {
+		m.app.notify.stop()
+	}
 	m.markStopped()
 
 	if m.stopping.Load() {

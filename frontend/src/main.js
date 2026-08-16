@@ -29,6 +29,11 @@ const remoteDeviceList = document.getElementById('remote-device-list');
 
 let remoteEnabled = false;
 
+const notifyEl = document.getElementById('notify');
+const notifyList = document.getElementById('notify-list');
+
+let notifications = [];
+
 function setBusy(busy) {
     spinner.classList.toggle('hidden', !busy);
     progress.classList.toggle('hidden', !busy);
@@ -145,6 +150,44 @@ async function renderDevices() {
     }
 }
 
+function typeLabel(t) {
+    switch (t) {
+        case 'question': return '提问';
+        case 'approval': return '待审批';
+        case 'completed': return '完成';
+        case 'error': return '报错';
+        default: return t || '通知';
+    }
+}
+
+function renderNotifications() {
+    notifyList.innerHTML = '';
+    notifications.forEach((n) => {
+        const li = document.createElement('li');
+        li.className = 'notify-item';
+        const badge = document.createElement('span');
+        badge.className = 'notify-badge notify-badge-' + (n.type || '');
+        badge.textContent = typeLabel(n.type);
+        const text = document.createElement('span');
+        text.className = 'notify-text';
+        text.textContent = n.summary || '';
+        li.appendChild(badge);
+        li.appendChild(text);
+        li.addEventListener('click', () => {
+            if (n.deepLink) showHarness(n.deepLink);
+        });
+        notifyList.appendChild(li);
+    });
+}
+
+function handleNotification(n) {
+    if (!n) return;
+    notifications.unshift(n);
+    if (notifications.length > 50) notifications.length = 50;
+    renderNotifications();
+    notifyEl.hidden = false;
+}
+
 function handleStatus(s) {
     if (!s) return;
 
@@ -233,8 +276,15 @@ document.getElementById('btn-remote-copy').addEventListener('click', async () =>
     }
 });
 
+document.getElementById('btn-notify-clear').addEventListener('click', () => {
+    notifications.length = 0;
+    renderNotifications();
+    notifyEl.hidden = true;
+});
+
 runtime.EventsOn('status', handleStatus);
 runtime.EventsOn('remote', handleRemote);
+runtime.EventsOn('notifications', handleNotification);
 App.Status().then(handleStatus).catch((err) => console.error(err));
 
 window.addEventListener('focus', refreshHarnessLayer);

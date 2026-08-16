@@ -304,3 +304,73 @@ body {
     text-align: center;
 }
 
+
+.notify {
+    width: min(440px, 100%);
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.22);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.notify-head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.notify-title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.notify-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 220px;
+    overflow: auto;
+    width: 100%;
+}
+
+.notify-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-accent);
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.notify-item:hover {
+    border-color: #31406a;
+    background: #1c2438;
+}
+
+.notify-badge {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.notify-badge-approval {
+    background: rgba(255, 176, 66, 0.15);
+    color: #ffb042;
+}
+
+.notify-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

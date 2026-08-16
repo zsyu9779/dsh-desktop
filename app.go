@@ -11,6 +11,7 @@ type App struct {
 	ctx    context.Context
 	dsh    *dshManager
 	remote *remoteManager
+	notify *notifyManager
 }
 
 // NewApp creates a new App instance.
@@ -18,6 +19,7 @@ func NewApp() *App {
 	a := &App{}
 	a.dsh = newDSHManager(a)
 	a.remote = newRemoteManager(a)
+	a.notify = newNotifyManager(a)
 	return a
 }
 
@@ -31,6 +33,7 @@ func (a *App) startup(ctx context.Context) {
 // shutdown is called when the app is about to exit.
 func (a *App) shutdown(ctx context.Context) {
 	a.remote.disable()
+	a.notify.stop()
 	a.dsh.stop()
 }
 
