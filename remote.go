@@ -1,14 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	_ "embed"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +24,9 @@ const (
 	remotePreferredPort = 8787
 	remoteCookieName    = "dsh_remote"
 )
+
+//go:embed remote_polyfill.js
+var polyfillScript []byte
 
 type remoteStatus struct {
 	Enabled bool   `json:"enabled"`
@@ -120,6 +127,23 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 		if req.Header.Get("Referer") != "" {
 			req.Header.Set("Referer", targetOrigin+"/")
 		}
+	}
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		ct := resp.Header.Get("Content-Type")
+		if !strings.HasPrefix(ct, "text/html") {
+			return nil
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		_ = resp.Body.Close()
+		modified := injectPolyfill(body)
+		resp.Body = io.NopCloser(bytes.NewReader(modified))
+		resp.ContentLength = int64(len(modified))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(modified)))
+		resp.Header.Del("Content-Encoding")
+		return nil
 	}
 	server := &http.Server{
 		Addr:              fmt.Sprintf("0.0.0.0:%d", port),
@@ -299,4 +323,32 @@ func isPhysicalIface(name string) bool {
 		}
 	}
 	return false
+}
+
+// injectPolyfill inserts the polyfill right after the <head> opening tag so it
+// runs before the app's deferred module scripts.
+func injectPolyfill(html []byte) []byte {
+	lower := bytes.ToLower(html)
+	idx := bytes.Index(lower, []byte("<head"))
+	if idx == -1 {
+		return prependPolyfill(html)
+	}
+	gt := bytes.IndexByte(html[idx:], '>')
+	if gt == -1 {
+		return prependPolyfill(html)
+	}
+	insertAt := idx + gt + 1
+	out := make([]byte, 0, len(html)+len(polyfillScript))
+	out = append(out, html[:insertAt]...)
+	out = append(out, polyfillScript...)
+	out = append(out, html[insertAt:]...)
+	return out
+}
+
+// prependPolyfill puts the polyfill before the document when no <head> exists.
+func prependPolyfill(html []byte) []byte {
+	out := make([]byte, 0, len(polyfillScript)+len(html))
+	out = append(out, polyfillScript...)
+	out = append(out, html...)
+	return out
 }
