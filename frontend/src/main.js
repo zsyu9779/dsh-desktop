@@ -8,12 +8,21 @@ const statusText = document.getElementById('status-text');
 const spinner = document.getElementById('spinner');
 const progress = document.getElementById('progress');
 const actions = document.getElementById('actions');
+const actionsReady = document.getElementById('actions-ready');
+const remoteEl = document.getElementById('remote');
 const logsEl = document.getElementById('logs');
 const splash = document.getElementById('splash');
 const harnessFrame = document.getElementById('harness-frame');
 
 let harnessURL = '';
 let enteringHarness = false;
+
+const btnRemoteToggle = document.getElementById('btn-remote-toggle');
+const remoteDetail = document.getElementById('remote-detail');
+const remoteQR = document.getElementById('remote-qr');
+const remoteURL = document.getElementById('remote-url');
+
+let remoteEnabled = false;
 
 function setBusy(busy) {
     spinner.classList.toggle('hidden', !busy);
@@ -47,28 +56,53 @@ function refreshHarnessLayer() {
     harnessFrame.classList.add('repaint');
 }
 
+function setReadyUI(visible) {
+    actionsReady.hidden = !visible;
+    remoteEl.hidden = !visible;
+}
+
+function handleRemote(s) {
+    if (!s) return;
+    remoteEnabled = !!s.enabled;
+    btnRemoteToggle.textContent = remoteEnabled ? '关闭' : '开启';
+    remoteDetail.hidden = !remoteEnabled;
+    if (remoteEnabled) {
+        const pairingUrl = s.url ? (s.url + '/?t=' + s.token) : '';
+        remoteURL.textContent = pairingUrl || s.url || '';
+        if (s.qr) {
+            remoteQR.src = s.qr;
+            remoteQR.hidden = false;
+        } else {
+            remoteQR.hidden = true;
+        }
+    }
+}
+
 function handleStatus(s) {
     if (!s) return;
 
     switch (s.state) {
         case 'ready':
-            statusText.textContent = s.message || 'DeepSeek Harness 已就绪，正在进入…';
+            statusText.textContent = s.message || 'DeepSeek Harness 已就绪';
             setBusy(false);
             setActionsVisible(false);
-            // Briefly let the "ready" state paint before revealing the embedded UI.
-            setTimeout(() => showHarness(s.url), 300);
+            setReadyUI(true);
+            document.getElementById('btn-enter').onclick = () => showHarness(s.url);
+            App.RemoteStatus().then(handleRemote).catch((err) => console.error(err));
             break;
 
         case 'starting':
             statusText.textContent = s.message || '正在启动…';
             setBusy(true);
             setActionsVisible(false);
+            setReadyUI(false);
             break;
 
         default: // error | exited
             statusText.textContent = s.message || '启动失败';
             setBusy(false);
             setActionsVisible(true);
+            setReadyUI(false);
             break;
     }
 }
@@ -87,7 +121,45 @@ document.getElementById('btn-logs').addEventListener('click', async () => {
     }
 });
 
+btnRemoteToggle.addEventListener('click', async () => {
+    try {
+        if (remoteEnabled) {
+            await App.DisableRemote();
+            handleRemote(await App.RemoteStatus());
+        } else {
+            handleRemote(await App.EnableRemote());
+        }
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+document.getElementById('btn-remote-regen').addEventListener('click', async () => {
+    try {
+        handleRemote(await App.RegenerateRemoteToken());
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+document.getElementById('btn-remote-copy').addEventListener('click', async () => {
+    const text = remoteURL.textContent;
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (err) {
+        const range = document.createRange();
+        range.selectNodeContents(remoteURL);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand('copy');
+        sel.removeAllRanges();
+    }
+});
+
 runtime.EventsOn('status', handleStatus);
+runtime.EventsOn('remote', handleRemote);
 App.Status().then(handleStatus).catch((err) => console.error(err));
 
 window.addEventListener('focus', refreshHarnessLayer);

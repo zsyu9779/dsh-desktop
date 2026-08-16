@@ -8,14 +8,16 @@ import (
 
 // App is the root Wails application. It owns the DeepSeek Harness process.
 type App struct {
-	ctx context.Context
-	dsh *dshManager
+	ctx    context.Context
+	dsh    *dshManager
+	remote *remoteManager
 }
 
 // NewApp creates a new App instance.
 func NewApp() *App {
 	a := &App{}
 	a.dsh = newDSHManager(a)
+	a.remote = newRemoteManager(a)
 	return a
 }
 
@@ -28,6 +30,7 @@ func (a *App) startup(ctx context.Context) {
 
 // shutdown is called when the app is about to exit.
 func (a *App) shutdown(ctx context.Context) {
+	a.remote.disable()
 	a.dsh.stop()
 }
 
@@ -64,6 +67,41 @@ func (a *App) OpenNodeJS() {
 // Logs returns recent DeepSeek Harness log lines.
 func (a *App) Logs() string {
 	return a.dsh.logsString()
+}
+
+// EnableRemote starts the authenticated LAN proxy for phone remote control.
+func (a *App) EnableRemote() (remoteStatus, error) {
+	s, err := a.remote.enable(a.dsh.current().URL)
+	if err != nil {
+		return s, err
+	}
+	a.emitRemote(s)
+	return s, nil
+}
+
+// DisableRemote stops the remote proxy and clears the pairing token.
+func (a *App) DisableRemote() {
+	a.remote.disable()
+	a.emitRemote(a.remote.status())
+}
+
+// RemoteStatus returns the current remote control state.
+func (a *App) RemoteStatus() remoteStatus {
+	return a.remote.status()
+}
+
+// RegenerateRemoteToken rotates the pairing token, invalidating existing sessions.
+func (a *App) RegenerateRemoteToken() remoteStatus {
+	s := a.remote.regenerateToken()
+	a.emitRemote(s)
+	return s
+}
+
+// emitRemote pushes a remote status snapshot to the frontend.
+func (a *App) emitRemote(s remoteStatus) {
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "remote", s)
+	}
 }
 
 // Quit exits the application.

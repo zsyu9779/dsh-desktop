@@ -230,3 +230,77 @@ body {
     user-select: text;
     -webkit-user-select: text;
 }
+
+/* Ensure the hidden attribute always wins over display rules. */
+[hidden] {
+    display: none !important;
+}
+
+.actions-ready {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.remote {
+    width: min(440px, 100%);
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.22);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-items: center;
+}
+
+.remote-head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.remote-title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.remote-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+}
+
+.remote-qr {
+    width: 200px;
+    height: 200px;
+    border-radius: 10px;
+    background: #fff;
+    padding: 8px;
+}
+
+.remote-url {
+    font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    word-break: break-all;
+    text-align: center;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.remote-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.remote-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+

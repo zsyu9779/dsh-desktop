@@ -30,6 +30,25 @@
 
         <div class="progress" id="progress" aria-hidden="true"><div class="progress-bar"></div></div>
 
+        <div class="actions actions-ready" id="actions-ready" hidden>
+            <button class="btn btn-primary" id="btn-enter">进入桌面界面</button>
+        </div>
+
+        <div class="remote" id="remote" hidden>
+            <div class="remote-head">
+                <span class="remote-title">手机远程</span>
+                <button class="btn btn-quiet" id="btn-remote-toggle">开启</button>
+            </div>
+            <div class="remote-detail" id="remote-detail" hidden>
+                <img class="remote-qr" id="remote-qr" alt="配对二维码" />
+                <p class="remote-url" id="remote-url"></p>
+                <div class="remote-actions">
+                    <button class="btn" id="btn-remote-copy">复制地址</button>
+                    <button class="btn btn-quiet" id="btn-remote-regen">重新生成配对码</button>
+                </div>
+            </div>
+            <p class="remote-hint">手机与电脑连同一 WiFi，扫码即可在手机上操控 DeepSeek Harness。</p>
+        </div>
         <div class="actions" id="actions" hidden>
             <button class="btn btn-primary" id="btn-retry">重试</button>
             <button class="btn" id="btn-node">安装 Node.js</button>
