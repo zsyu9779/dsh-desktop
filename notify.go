@@ -27,6 +27,7 @@ type Notification struct {
 type serverRequest struct {
 	Type    string
 	Method  string
+	RPCID   string
 	Payload json.RawMessage
 }
 
@@ -71,11 +72,18 @@ type agentErrorFrame struct {
 
 // classifyFrame parses one server-request frame and returns a Notification if
 // it is a high-value event (question, approval, completed, or error).
-func classifyFrame(raw []byte) (Notification, bool) {
+func classifyFrame(raw []byte) (n Notification, ok bool) {
 	var env serverRequest
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return Notification{}, false
 	}
+	// Stamp the dedupe key from the envelope rpcId, which dsh reuses verbatim
+	// when it replays still-pending question/approval frames on reconnect.
+	defer func() {
+		if ok && n.DedupeKey == "" {
+			n.DedupeKey = env.RPCID
+		}
+	}()
 
 	// Peek the frame type so the payload can be parsed into the right shape.
 	var probe struct {
@@ -163,6 +171,9 @@ func classifyFrame(raw []byte) (Notification, bool) {
 	}
 }
 
+// maxSeenDedupe bounds the in-memory set of recently emitted dedupe keys.
+const maxSeenDedupe = 256
+
 // notifyManager subscribes to dsh's real-time event streams and surfaces
 // high-value events as Notifications to the frontend panel.
 type notifyManager struct {
@@ -172,6 +183,7 @@ type notifyManager struct {
 	running bool
 	conns   []*websocket.Conn
 	baseURL string
+	seen    map[string]struct{}
 
 	// sink is an injectable channel used by tests; when nil, notifications are
 	// emitted to the frontend via Wails.
@@ -199,34 +211,58 @@ func (n *notifyManager) start(baseURL string) {
 }
 
 func (n *notifyManager) subscribe(baseURL, path string) {
-	wsURL, err := wsURLFor(baseURL, path)
-	if err != nil {
-		n.logf("notify: %v", err)
-		return
-	}
-	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil {
-		n.logf("notify: dial %s: %v", path, err)
-		return
-	}
-
-	n.mu.Lock()
-	if !n.running {
-		n.mu.Unlock()
-		_ = c.Close()
-		return
-	}
-	n.conns = append(n.conns, c)
-	n.mu.Unlock()
+	backoff := 500 * time.Millisecond
+	const maxBackoff = 30 * time.Second
 
 	for {
-		_, msg, err := c.ReadMessage()
+		if !n.isRunning() {
+			return
+		}
+		wsURL, err := wsURLFor(baseURL, path)
 		if err != nil {
-			break
+			n.logf("notify: %v", err)
+			return
 		}
-		if notif, ok := classifyFrame(msg); ok {
-			n.emit(notif)
+		c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		if err != nil {
+			n.logf("notify: dial %s: %v (retry in %v)", path, err, backoff)
+			if !n.sleepOrStop(backoff) {
+				return
+			}
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
 		}
+
+		n.mu.Lock()
+		if !n.running {
+			n.mu.Unlock()
+			_ = c.Close()
+			return
+		}
+		n.conns = append(n.conns, c)
+		n.mu.Unlock()
+
+		// A successful connect resets the backoff for the next failure.
+		backoff = 500 * time.Millisecond
+
+		for {
+			_, msg, err := c.ReadMessage()
+			if err != nil {
+				break
+			}
+			if notif, ok := classifyFrame(msg); ok {
+				n.emit(notif)
+			}
+		}
+
+		// Connection dropped: unregister, then the loop re-dials.
+		n.mu.Lock()
+		n.conns = removeConn(n.conns, c)
+		n.mu.Unlock()
+		_ = c.Close()
 	}
 }
 
@@ -242,6 +278,17 @@ func (n *notifyManager) emit(notif Notification) {
 	}
 
 	n.mu.Lock()
+	if n.seen == nil {
+		n.seen = make(map[string]struct{})
+	}
+	if _, dup := n.seen[notif.DedupeKey]; dup {
+		n.mu.Unlock()
+		return
+	}
+	if len(n.seen) >= maxSeenDedupe {
+		n.seen = make(map[string]struct{})
+	}
+	n.seen[notif.DedupeKey] = struct{}{}
 	sink := n.sink
 	n.mu.Unlock()
 
@@ -255,6 +302,35 @@ func (n *notifyManager) emit(notif Notification) {
 	if n.app != nil && n.app.ctx != nil {
 		runtime.EventsEmit(n.app.ctx, "notifications", notif)
 	}
+}
+
+func (n *notifyManager) isRunning() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.running
+}
+
+// sleepOrStop sleeps in small increments so stop() stays responsive; it returns
+// false if the manager was stopped during the sleep.
+func (n *notifyManager) sleepOrStop(d time.Duration) bool {
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if !n.isRunning() {
+			return false
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return true
+}
+
+func removeConn(conns []*websocket.Conn, target *websocket.Conn) []*websocket.Conn {
+	out := conns[:0]
+	for _, c := range conns {
+		if c != target {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func (n *notifyManager) stop() {
