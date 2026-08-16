@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -139,6 +140,9 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 		// (the wire Host header) untouched; force it to loopback so dsh's
 		// /api trust fence accepts the request.
 		req.Host = targetURL.Host
+		// Prefer uncompressed HTML so our polyfill injection never lands on
+		// compressed bytes; we still handle gzip defensively in ModifyResponse.
+		req.Header.Set("Accept-Encoding", "identity")
 		if req.Header.Get("Origin") != "" {
 			req.Header.Set("Origin", targetOrigin)
 		}
@@ -156,6 +160,26 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 			return err
 		}
 		_ = resp.Body.Close()
+
+		if resp.Header.Get("Content-Encoding") == "gzip" {
+			raw, err := gunzip(body)
+			if err != nil {
+				// Can't decode; pass through unchanged rather than corrupting.
+				resp.Body = io.NopCloser(bytes.NewReader(body))
+				return nil
+			}
+			modified := injectPolyfill(raw)
+			recompressed, err := gzipBytes(modified)
+			if err != nil {
+				return err
+			}
+			resp.Body = io.NopCloser(bytes.NewReader(recompressed))
+			resp.ContentLength = int64(len(recompressed))
+			resp.Header.Set("Content-Length", strconv.Itoa(len(recompressed)))
+			resp.Header.Set("Content-Encoding", "gzip")
+			return nil
+		}
+
 		modified := injectPolyfill(body)
 		resp.Body = io.NopCloser(bytes.NewReader(modified))
 		resp.ContentLength = int64(len(modified))
@@ -398,4 +422,25 @@ func prependPolyfill(html []byte) []byte {
 	out = append(out, polyfillScript...)
 	out = append(out, html...)
 	return out
+}
+
+func gunzip(data []byte) ([]byte, error) {
+	zr, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+	return io.ReadAll(zr)
+}
+
+func gzipBytes(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write(data); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
