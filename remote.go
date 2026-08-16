@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,29 +25,35 @@ import (
 const (
 	remotePreferredPort = 8787
 	remoteCookieName    = "dsh_remote"
+	pairingCodeTTL      = 60 * time.Second
+	deviceJWTTTL        = 12 * time.Hour
 )
 
 //go:embed remote_polyfill.js
 var polyfillScript []byte
 
 type remoteStatus struct {
-	Enabled bool   `json:"enabled"`
-	URL     string `json:"url"`
-	Token   string `json:"token"`
-	QR      string `json:"qr"`
-	Port    int    `json:"port"`
-	Message string `json:"message"`
+	Enabled       bool   `json:"enabled"`
+	URL           string `json:"url"`
+	PairingCode   string `json:"pairingCode"`
+	HostPublicKey string `json:"hostPublicKey"`
+	QR            string `json:"qr"`
+	Port          int    `json:"port"`
+	Message       string `json:"message"`
 }
 
 type remoteManager struct {
 	app *App
 
-	mu      sync.Mutex
-	enabled bool
-	token   string
-	port    int
-	target  string
-	server  *http.Server
+	mu            sync.Mutex
+	enabled       bool
+	pairingCode   string
+	pairingExpiry time.Time
+	cred          *hostCredential
+	devices       *deviceRegistry
+	port          int
+	target        string
+	server        *http.Server
 }
 
 func newRemoteManager(app *App) *remoteManager {
@@ -59,7 +67,10 @@ func (r *remoteManager) status() remoteStatus {
 }
 
 func (r *remoteManager) buildStatusLocked() remoteStatus {
-	s := remoteStatus{Enabled: r.enabled, Token: r.token, Port: r.port}
+	s := remoteStatus{Enabled: r.enabled, PairingCode: r.pairingCode, Port: r.port}
+	if r.cred != nil {
+		s.HostPublicKey = r.cred.publicKeyB64()
+	}
 	if r.enabled {
 		if ip := firstLANIP(); ip != "" {
 			s.URL = fmt.Sprintf("http://%s:%d", ip, r.port)
@@ -73,14 +84,14 @@ func (r *remoteManager) buildStatusLocked() remoteStatus {
 }
 
 func (r *remoteManager) qrLocked() string {
-	if r.token == "" {
+	if r.pairingCode == "" || time.Now().After(r.pairingExpiry) {
 		return ""
 	}
 	ip := firstLANIP()
 	if ip == "" {
 		return ""
 	}
-	pairingURL := fmt.Sprintf("http://%s:%d/?t=%s", ip, r.port, r.token)
+	pairingURL := fmt.Sprintf("http://%s:%d/?pair=%s", ip, r.port, r.pairingCode)
 	png, err := qrcode.Encode(pairingURL, qrcode.Medium, 256)
 	if err != nil {
 		return ""
@@ -99,7 +110,14 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 		return r.buildStatusLocked(), fmt.Errorf("harness not ready")
 	}
 
-	token, err := randomToken(24)
+	cred, err := loadOrCreateCredential(stateDir())
+	if err != nil {
+		return r.buildStatusLocked(), err
+	}
+	r.cred = cred
+	r.devices = newDeviceRegistry(filepath.Join(stateDir(), "devices.json"))
+
+	code, err := randomToken(12)
 	if err != nil {
 		return r.buildStatusLocked(), err
 	}
@@ -113,17 +131,13 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
-	// dsh's /api trust fence rejects a request when its Origin header does not
-	// match the Host it was served from. The phone talks to the proxy origin
-	// (e.g. http://192.168.1.5:8787), so we rewrite browser markers back to the
-	// loopback target or every POST and WebSocket upgrade would 403.
 	targetOrigin := targetURL.Scheme + "://" + targetURL.Host
 	baseDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		baseDirector(req)
 		// NewSingleHostReverseProxy rewrites req.URL.Host but leaves req.Host
-		// (the wire Host header) untouched, so the phone's Host would reach dsh
-		// as 192.168.x.x and trip the /api trust fence. Force it to loopback.
+		// (the wire Host header) untouched; force it to loopback so dsh's
+		// /api trust fence accepts the request.
 		req.Host = targetURL.Host
 		if req.Header.Get("Origin") != "" {
 			req.Header.Set("Origin", targetOrigin)
@@ -156,7 +170,8 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 	}
 
 	r.enabled = true
-	r.token = token
+	r.pairingCode = code
+	r.pairingExpiry = time.Now().Add(pairingCodeTTL)
 	r.port = port
 	r.target = target
 	r.server = server
@@ -182,7 +197,7 @@ func (r *remoteManager) disable() {
 	server := r.server
 	r.enabled = false
 	r.server = nil
-	r.token = ""
+	r.pairingCode = ""
 	r.mu.Unlock()
 
 	if server != nil {
@@ -200,52 +215,87 @@ func (r *remoteManager) regenerateToken() remoteStatus {
 	if !r.enabled {
 		return r.buildStatusLocked()
 	}
-	token, err := randomToken(24)
+	code, err := randomToken(12)
 	if err != nil {
-		r.logf("rotate token failed: %v", err)
+		r.logf("rotate pairing code failed: %v", err)
 		return r.buildStatusLocked()
 	}
-	r.token = token
-	r.logf("remote token rotated")
+	r.pairingCode = code
+	r.pairingExpiry = time.Now().Add(pairingCodeTTL)
+	r.logf("pairing code rotated")
 	return r.buildStatusLocked()
 }
 
 func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
-		token := r.token
 		enabled := r.enabled
+		pairingCode := r.pairingCode
+		pairingExpiry := r.pairingExpiry
+		cred := r.cred
+		devices := r.devices
 		r.mu.Unlock()
 
-		if !enabled || token == "" {
+		if !enabled || cred == nil {
 			http.Error(w, "remote disabled", http.StatusServiceUnavailable)
 			return
 		}
 
-		if (req.URL.Path == "/" || req.URL.Path == "") && req.URL.Query().Get("t") != "" {
-			if req.URL.Query().Get("t") != token {
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
+		// One-time pairing code presented on the root path.
+		if req.URL.Path == "/" && req.URL.Query().Get("pair") != "" {
+			if r.consumePairingCode(w, req, pairingCode, pairingExpiry, cred, devices) {
+				http.Redirect(w, req, "/", http.StatusFound)
 			}
-			http.SetCookie(w, &http.Cookie{
-				Name:     remoteCookieName,
-				Value:    token,
-				Path:     "/",
-				HttpOnly: true,
-				SameSite: http.SameSiteLaxMode,
-			})
-			http.Redirect(w, req, "/", http.StatusFound)
 			return
 		}
 
+		// Authenticated requests carry the device JWT in a cookie.
 		c, err := req.Cookie(remoteCookieName)
-		if err != nil || c.Value != token {
+		if err != nil {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-
+		if _, err := cred.verifyJWT(c.Value); err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 		next.ServeHTTP(w, req)
 	})
+}
+
+// consumePairingCode validates the one-time pairing code, registers the device,
+// and issues a JWT cookie. It returns true on success (after writing the cookie).
+func (r *remoteManager) consumePairingCode(w http.ResponseWriter, req *http.Request, code string, expiry time.Time, cred *hostCredential, devices *deviceRegistry) bool {
+	if code == "" || time.Now().After(expiry) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return false
+	}
+	if subtle.ConstantTimeCompare([]byte(req.URL.Query().Get("pair")), []byte(code)) != 1 {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return false
+	}
+
+	// Single-use: burn the code on success so it can't be replayed.
+	r.mu.Lock()
+	r.pairingCode = ""
+	r.pairingExpiry = time.Time{}
+	r.mu.Unlock()
+
+	deviceID := newDeviceID()
+	devices.register(deviceID, "device", deviceFingerprint(deviceID))
+	token, err := cred.signJWT(deviceID, "full", deviceJWTTTL)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return false
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     remoteCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	return true
 }
 
 func (r *remoteManager) logf(format string, args ...interface{}) {
@@ -276,8 +326,7 @@ func pickRemotePort() (int, error) {
 }
 
 // firstLANIP returns the best-guess LAN IPv4 for the pairing URL, preferring
-// physical interfaces (en/eth/wl) over virtual ones (utun/vmnet) so a VPN or
-// VM adapter does not shadow the address the phone can actually reach.
+// physical interfaces (en/eth/wl) over virtual ones (utun/vmnet).
 func firstLANIP() string {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -302,7 +351,6 @@ func firstLANIP() string {
 	return fallback
 }
 
-// ipv4For returns the first IPv4 address assigned to the interface.
 func ipv4For(iface net.Interface) string {
 	addrs, err := iface.Addrs()
 	if err != nil {
@@ -318,8 +366,6 @@ func ipv4For(iface net.Interface) string {
 	return ""
 }
 
-// isPhysicalIface reports whether the interface name looks like a physical
-// NIC (Ethernet/WiFi/WWAN) across macOS, Linux, and Windows.
 func isPhysicalIface(name string) bool {
 	for _, p := range []string{"en", "eth", "wl", "wlan", "wwan"} {
 		if strings.HasPrefix(name, p) {
@@ -329,8 +375,6 @@ func isPhysicalIface(name string) bool {
 	return false
 }
 
-// injectPolyfill inserts the polyfill right after the <head> opening tag so it
-// runs before the app's deferred module scripts.
 func injectPolyfill(html []byte) []byte {
 	lower := bytes.ToLower(html)
 	idx := bytes.Index(lower, []byte("<head"))
@@ -349,7 +393,6 @@ func injectPolyfill(html []byte) []byte {
 	return out
 }
 
-// prependPolyfill puts the polyfill before the document when no <head> exists.
 func prependPolyfill(html []byte) []byte {
 	out := make([]byte, 0, len(polyfillScript)+len(html))
 	out = append(out, polyfillScript...)

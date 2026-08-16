@@ -67,7 +67,7 @@ function handleRemote(s) {
     btnRemoteToggle.textContent = remoteEnabled ? '关闭' : '开启';
     remoteDetail.hidden = !remoteEnabled;
     if (remoteEnabled) {
-        const pairingUrl = s.url ? (s.url + '/?t=' + s.token) : '';
+        const pairingUrl = s.url ? (s.url + '/?pair=' + s.pairingCode) : '';
         remoteURL.textContent = pairingUrl || s.url || '';
         if (s.qr) {
             remoteQR.src = s.qr;
