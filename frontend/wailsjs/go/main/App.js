@@ -10,6 +10,10 @@ export function EnableRemote() {
   return window['go']['main']['App']['EnableRemote']();
 }
 
+export function ListDevices() {
+  return window['go']['main']['App']['ListDevices']();
+}
+
 export function Logs() {
   return window['go']['main']['App']['Logs']();
 }
@@ -36,6 +40,14 @@ export function RemoteStatus() {
 
 export function Retry() {
   return window['go']['main']['App']['Retry']();
+}
+
+export function RevokeDevice(arg1) {
+  return window['go']['main']['App']['RevokeDevice'](arg1);
+}
+
+export function SetAllowPrivileged(arg1) {
+  return window['go']['main']['App']['SetAllowPrivileged'](arg1);
 }
 
 export function Status() {

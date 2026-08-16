@@ -6,6 +6,8 @@ export function DisableRemote():Promise<void>;
 
 export function EnableRemote():Promise<main.remoteStatus>;
 
+export function ListDevices():Promise<Array<main.deviceIdentity>>;
+
 export function Logs():Promise<string>;
 
 export function OpenInBrowser():Promise<void>;
@@ -19,5 +21,9 @@ export function RegenerateRemoteToken():Promise<main.remoteStatus>;
 export function RemoteStatus():Promise<main.remoteStatus>;
 
 export function Retry():Promise<void>;
+
+export function RevokeDevice(arg1:string):Promise<boolean>;
+
+export function SetAllowPrivileged(arg1:boolean):Promise<void>;
 
 export function Status():Promise<main.status>;
