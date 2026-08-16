@@ -7,3 +7,4 @@ https://zsyu9779.github.io/dsh-desktop/security/
 https://zsyu9779.github.io/dsh-desktop/faq/
 https://zsyu9779.github.io/dsh-desktop/troubleshooting/
 https://zsyu9779.github.io/dsh-desktop/releases/v0.1.4/
+https://zsyu9779.github.io/dsh-desktop/releases/v0.1.5/
