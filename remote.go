@@ -106,6 +106,21 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	// dsh's /api trust fence rejects a request when its Origin header does not
+	// match the Host it was served from. The phone talks to the proxy origin
+	// (e.g. http://192.168.1.5:8787), so we rewrite browser markers back to the
+	// loopback target or every POST and WebSocket upgrade would 403.
+	targetOrigin := targetURL.Scheme + "://" + targetURL.Host
+	baseDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		baseDirector(req)
+		if req.Header.Get("Origin") != "" {
+			req.Header.Set("Origin", targetOrigin)
+		}
+		if req.Header.Get("Referer") != "" {
+			req.Header.Set("Referer", targetOrigin+"/")
+		}
+	}
 	server := &http.Server{
 		Addr:              fmt.Sprintf("0.0.0.0:%d", port),
 		Handler:           r.authMiddleware(proxy),
