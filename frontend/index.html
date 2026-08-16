@@ -46,6 +46,17 @@
                     <button class="btn" id="btn-remote-copy">复制地址</button>
                     <button class="btn btn-quiet" id="btn-remote-regen">重新生成配对码</button>
                 </div>
+                <div class="remote-meta" id="remote-meta" hidden>
+                    <p class="remote-fp" id="remote-fp"></p>
+                    <label class="remote-allow">
+                        <input type="checkbox" id="remote-allow-privileged" />
+                        允许远程管理敏感设置（settings / 凭据等）
+                    </label>
+                </div>
+                <div class="remote-devices" id="remote-devices" hidden>
+                    <p class="remote-devices-title">已配对设备</p>
+                    <ul class="remote-device-list" id="remote-device-list"></ul>
+                </div>
             </div>
             <p class="remote-hint">手机与电脑连同一 WiFi，扫码即可在手机上操控 DeepSeek Harness。</p>
         </div>
