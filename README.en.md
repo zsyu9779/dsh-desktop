@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/hero-en.jpg" alt="DeepSeek Harness Desktop: about 9 MB, no Electron, with LAN QR remote access" width="100%">
+  <img src="./assets/hero.jpg" alt="DeepSeek Harness Desktop native app window on the official website visual system" width="100%">
 </p>
 
 # DeepSeek Harness Desktop

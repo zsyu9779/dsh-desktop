@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/hero-zh.jpg" alt="DeepSeek Harness Desktop：约 9 MB、无 Electron、支持局域网扫码远程" width="100%">
+  <img src="./assets/hero.jpg" alt="DeepSeek Harness Desktop：官网视觉背景上的原生应用窗口" width="100%">
 </p>
 
 # DeepSeek Harness Desktop
