@@ -6,3 +6,9 @@ frontend/dist
 # compiled binaries from `go build` (named after the module)
 /dsh-desktop
 /dsh-desktop.exe
+
+# local issue tracker (spec + tickets; never pushed)
+.scratch/
+
+# go build cache (kept in workspace so builds work under the file sandbox)
+.gocache/
