@@ -260,7 +260,7 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 		}
 	}()
 
-	r.logf("remote enabled on 0.0.0.0:%d -> %s", port, target)
+	r.logf("remote enabled: https://0.0.0.0:%d -> %s (cert=%s, pairing=%s)", port, target, fingerprint, code)
 	return r.buildStatusLocked(), nil
 }
 
@@ -315,13 +315,18 @@ func (r *remoteManager) revokeDevice(deviceID string) bool {
 	if devices == nil {
 		return false
 	}
-	return devices.revoke(deviceID)
+	if devices.revoke(deviceID) {
+		r.logf("device revoked: %s", deviceID)
+		return true
+	}
+	return false
 }
 
 func (r *remoteManager) setAllowPrivileged(v bool) {
 	r.mu.Lock()
 	r.allowPrivileged = v
 	r.mu.Unlock()
+	r.logf("privileged methods allowed: %v", v)
 }
 
 func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
@@ -351,20 +356,24 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 		// Authenticated requests carry the device JWT in a cookie.
 		c, err := req.Cookie(remoteCookieName)
 		if err != nil {
+			r.logf("auth rejected: missing cookie (from %s)", req.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
 		claims, err := cred.verifyJWT(c.Value)
 		if err != nil {
+			r.logf("auth rejected: invalid token (from %s)", req.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
 		if !devices.exists(claims.DeviceID) {
+			r.logf("auth rejected: device %s revoked (from %s)", claims.DeviceID, req.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
 		devices.touch(claims.DeviceID)
 		if isPrivilegedPath(req.URL.Path) && !allowPrivileged {
+			r.logf("auth rejected: privileged method %s denied (from %s)", req.URL.Path, req.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -376,10 +385,12 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 // and issues a JWT cookie. It returns true on success (after writing the cookie).
 func (r *remoteManager) consumePairingCode(w http.ResponseWriter, req *http.Request, code string, expiry time.Time, cred *hostCredential, devices *deviceRegistry) bool {
 	if code == "" || time.Now().After(expiry) {
+		r.logf("pairing rejected: no code or expired (from %s)", req.RemoteAddr)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return false
 	}
 	if subtle.ConstantTimeCompare([]byte(req.URL.Query().Get("pair")), []byte(code)) != 1 {
+		r.logf("pairing rejected: bad code (from %s)", req.RemoteAddr)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return false
 	}
@@ -394,9 +405,11 @@ func (r *remoteManager) consumePairingCode(w http.ResponseWriter, req *http.Requ
 	devices.register(deviceID, "device", deviceFingerprint(deviceID))
 	token, err := cred.signJWT(deviceID, "full", deviceJWTTTL)
 	if err != nil {
+		r.logf("pairing failed: sign JWT: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return false
 	}
+	r.logf("device paired: %s (from %s)", deviceID, req.RemoteAddr)
 	http.SetCookie(w, &http.Cookie{
 		Name:     remoteCookieName,
 		Value:    token,
