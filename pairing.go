@@ -246,6 +246,17 @@ func (r *deviceRegistry) exists(deviceID string) bool {
 	return ok
 }
 
+// touch refreshes a device's LastActive (in memory only; persisted on
+// register/revoke). It is a no-op for a revoked device.
+func (r *deviceRegistry) touch(deviceID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if d, ok := r.devices[deviceID]; ok {
+		d.LastActive = time.Now()
+		r.devices[deviceID] = d
+	}
+}
+
 // newDeviceID returns a random device identifier.
 func newDeviceID() string {
 	b := make([]byte, 16)

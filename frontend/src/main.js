@@ -21,6 +21,11 @@ const btnRemoteToggle = document.getElementById('btn-remote-toggle');
 const remoteDetail = document.getElementById('remote-detail');
 const remoteQR = document.getElementById('remote-qr');
 const remoteURL = document.getElementById('remote-url');
+const remoteMeta = document.getElementById('remote-meta');
+const remoteFp = document.getElementById('remote-fp');
+const remoteAllowPrivileged = document.getElementById('remote-allow-privileged');
+const remoteDevices = document.getElementById('remote-devices');
+const remoteDeviceList = document.getElementById('remote-device-list');
 
 let remoteEnabled = false;
 
@@ -75,6 +80,68 @@ function handleRemote(s) {
         } else {
             remoteQR.hidden = true;
         }
+        renderRemoteMeta(s);
+        renderDevices();
+    } else {
+        remoteMeta.hidden = true;
+        remoteDevices.hidden = true;
+    }
+}
+
+function renderRemoteMeta(s) {
+    remoteMeta.hidden = false;
+    const parts = [];
+    if (s.hostPublicKey) parts.push('Host 公钥: ' + s.hostPublicKey);
+    if (s.certFingerprint) parts.push('证书指纹: ' + s.certFingerprint);
+    remoteFp.textContent = parts.join(' · ') || '';
+    remoteAllowPrivileged.checked = !!s.allowPrivileged;
+}
+
+function timeAgo(t) {
+    if (!t) return '—';
+    const d = new Date(t);
+    if (isNaN(d.getTime())) return '—';
+    const diff = Date.now() - d.getTime();
+    if (diff < 30000) return '在线';
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+    return d.toLocaleString();
+}
+
+async function renderDevices() {
+    try {
+        const devices = await App.ListDevices();
+        remoteDevices.hidden = false;
+        remoteDeviceList.innerHTML = '';
+        if (!devices || devices.length === 0) {
+            const li = document.createElement('li');
+            li.textContent = '(暂无已配对设备)';
+            remoteDeviceList.appendChild(li);
+            return;
+        }
+        devices.forEach((d) => {
+            const li = document.createElement('li');
+            li.className = 'remote-device';
+            const name = document.createElement('span');
+            name.textContent = (d.name || '设备') + ' · ' + timeAgo(d.lastActive);
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-quiet';
+            btn.textContent = '吊销';
+            btn.addEventListener('click', async () => {
+                try {
+                    await App.RevokeDevice(d.deviceId);
+                    renderDevices();
+                } catch (err) {
+                    console.error(err);
+                }
+            });
+            li.appendChild(name);
+            li.appendChild(btn);
+            remoteDeviceList.appendChild(li);
+        });
+    } catch (err) {
+        console.error(err);
     }
 }
 
@@ -137,6 +204,14 @@ btnRemoteToggle.addEventListener('click', async () => {
 document.getElementById('btn-remote-regen').addEventListener('click', async () => {
     try {
         handleRemote(await App.RegenerateRemoteToken());
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+remoteAllowPrivileged.addEventListener('change', async () => {
+    try {
+        await App.SetAllowPrivileged(remoteAllowPrivileged.checked);
     } catch (err) {
         console.error(err);
     }

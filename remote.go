@@ -363,6 +363,7 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
+		devices.touch(claims.DeviceID)
 		if isPrivilegedPath(req.URL.Path) && !allowPrivileged {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
