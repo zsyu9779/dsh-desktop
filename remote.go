@@ -121,6 +121,10 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 	baseDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		baseDirector(req)
+		// NewSingleHostReverseProxy rewrites req.URL.Host but leaves req.Host
+		// (the wire Host header) untouched, so the phone's Host would reach dsh
+		// as 192.168.x.x and trip the /api trust fence. Force it to loopback.
+		req.Host = targetURL.Host
 		if req.Header.Get("Origin") != "" {
 			req.Header.Set("Origin", targetOrigin)
 		}
