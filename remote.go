@@ -62,6 +62,27 @@ func isPrivilegedPath(path string) bool {
 	return privilegedMethods[strings.TrimPrefix(path, "/api/")]
 }
 
+// preinstalledPluginRoutePrefixes are URL path prefixes registered by the
+// preinstalled DSH plugins (diff-review's git/file routes, file-changes'
+// reveal route). They sit outside dsh's own PRIVILEGED_METHODS allowlist, so
+// they must be blocked outright over the LAN proxy: safe on the desktop
+// loopback, but never reachable from a paired phone.
+var preinstalledPluginRoutePrefixes = []string{
+	"/diff-review/",
+	"/api/file-changes/",
+}
+
+// isPreinstalledPluginRoute reports whether a request path targets a
+// preinstalled-plugin HTTP route that must be blocked over the LAN proxy.
+func isPreinstalledPluginRoute(path string) bool {
+	for _, prefix := range preinstalledPluginRoutePrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 type remoteStatus struct {
 	Enabled         bool   `json:"enabled"`
 	AllowPrivileged bool   `json:"allowPrivileged"`
@@ -374,6 +395,11 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 		devices.touch(claims.DeviceID)
 		if isPrivilegedPath(req.URL.Path) && !allowPrivileged {
 			r.logf("auth rejected: privileged method %s denied (from %s)", req.URL.Path, req.RemoteAddr)
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if isPreinstalledPluginRoute(req.URL.Path) {
+			r.logf("auth rejected: preinstalled-plugin route %s denied (from %s)", req.URL.Path, req.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
