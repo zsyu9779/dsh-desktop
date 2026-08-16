@@ -43,6 +43,36 @@ func TestClassifyQuestionAndApproval(t *testing.T) {
 			name: "unrecognised frame is ignored",
 			raw:  testFrame("session/event", `{"type":"session/event"}`),
 		},
+		{
+			name:        "goal complete",
+			raw:         testFrame("session/event", `{"type":"session/event","sessionId":"s5","event":{"type":"goal/change","data":{"operation":"complete"}}}`),
+			wantType:    "completed",
+			wantSession: "s5",
+		},
+		{
+			name:        "goal block",
+			raw:         testFrame("session/event", `{"type":"session/event","sessionId":"s5","event":{"type":"goal/change","data":{"operation":"block"}}}`),
+			wantType:    "error",
+			wantSession: "s5",
+		},
+		{
+			name:        "turn error",
+			raw:         testFrame("session/event", `{"type":"session/event","sessionId":"s6","event":{"type":"turn/end","data":{"reason":{"kind":"error"}}}}`),
+			wantType:    "error",
+			wantSession: "s6",
+		},
+		{
+			name:        "turn blocked",
+			raw:         testFrame("session/event", `{"type":"session/event","sessionId":"s6","event":{"type":"turn/end","data":{"reason":{"kind":"blocked"}}}}`),
+			wantType:    "error",
+			wantSession: "s6",
+		},
+		{
+			name:        "agent error",
+			raw:         testFrame("host/agent-error", `{"type":"host/agent-error","sessionId":"s7","message":"boom"}`),
+			wantType:    "error",
+			wantSession: "s7",
+		},
 	}
 
 	for _, tc := range cases {

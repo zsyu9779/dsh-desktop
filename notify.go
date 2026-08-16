@@ -46,20 +46,51 @@ type questionItem struct {
 	}
 }
 
+// sessionEventFrame is the payload of a session/event mux frame. Event.Data
+// holds the per-event payload (goal/change -> operation; turn/end -> reason.kind).
+type sessionEventFrame struct {
+	Type      string
+	SessionID string
+	Event     struct {
+		Type string
+		Data struct {
+			Operation string
+			Reason    struct {
+				Kind string
+			}
+		}
+	}
+}
+
+// agentErrorFrame is the payload of a host/agent-error host frame.
+type agentErrorFrame struct {
+	Type      string
+	SessionID string
+	Message   string
+}
+
 // classifyFrame parses one server-request frame and returns a Notification if
-// it is a high-value event this milestone recognises (question or approval).
+// it is a high-value event (question, approval, completed, or error).
 func classifyFrame(raw []byte) (Notification, bool) {
 	var env serverRequest
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return Notification{}, false
 	}
-	var p framePayload
-	if err := json.Unmarshal(env.Payload, &p); err != nil {
+
+	// Peek the frame type so the payload can be parsed into the right shape.
+	var probe struct {
+		Type string
+	}
+	if err := json.Unmarshal(env.Payload, &probe); err != nil {
 		return Notification{}, false
 	}
 
-	switch p.Type {
+	switch probe.Type {
 	case "question/requested":
+		var p framePayload
+		if err := json.Unmarshal(env.Payload, &p); err != nil {
+			return Notification{}, false
+		}
 		planReview := false
 		summary := ""
 		for _, q := range p.Questions {
@@ -81,12 +112,52 @@ func classifyFrame(raw []byte) (Notification, bool) {
 			n.Summary = "新的提问"
 		}
 		return n, true
+
 	case "approval/requested":
+		var p framePayload
+		if err := json.Unmarshal(env.Payload, &p); err != nil {
+			return Notification{}, false
+		}
 		summary := "工具请求授权"
 		if p.ToolName != "" {
 			summary = p.ToolName + " 请求授权"
 		}
 		return Notification{Type: "approval", SessionID: p.SessionID, Summary: summary}, true
+
+	case "session/event":
+		var f sessionEventFrame
+		if err := json.Unmarshal(env.Payload, &f); err != nil {
+			return Notification{}, false
+		}
+		switch f.Event.Type {
+		case "goal/change":
+			switch f.Event.Data.Operation {
+			case "complete":
+				return Notification{Type: "completed", SessionID: f.SessionID, Summary: "目标已完成"}, true
+			case "block":
+				return Notification{Type: "error", SessionID: f.SessionID, Summary: "目标被阻塞"}, true
+			}
+		case "turn/end":
+			switch f.Event.Data.Reason.Kind {
+			case "error":
+				return Notification{Type: "error", SessionID: f.SessionID, Summary: "任务出错"}, true
+			case "blocked":
+				return Notification{Type: "error", SessionID: f.SessionID, Summary: "任务被阻塞"}, true
+			}
+		}
+		return Notification{}, false
+
+	case "host/agent-error":
+		var f agentErrorFrame
+		if err := json.Unmarshal(env.Payload, &f); err != nil {
+			return Notification{}, false
+		}
+		summary := f.Message
+		if summary == "" {
+			summary = "Agent 出错"
+		}
+		return Notification{Type: "error", SessionID: f.SessionID, Summary: summary}, true
+
 	default:
 		return Notification{}, false
 	}
