@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DeepSeek Harness Desktop — Lightweight Wails App for macOS, Windows & Linux</title>
-  <meta name="description" content="An unofficial, lightweight cross-platform desktop app for DeepSeek Harness. Native Wails shell, under 10 MB, available for macOS, Windows and Linux.">
+  <meta name="description" content="An unofficial, lightweight cross-platform desktop app for DeepSeek Harness. Native Wails shell, about 4–11 MB, available for macOS, Windows and Linux.">
   <meta name="google-site-verification" content="qP8-UptB7_hwkZfwryVVXBt9Og3M8DFeS1_TrRHnH5A">
   <link rel="canonical" href="https://zsyu9779.github.io/dsh-desktop/">
   <link rel="alternate" hreflang="en" href="https://zsyu9779.github.io/dsh-desktop/">
@@ -12,12 +12,12 @@
   <link rel="alternate" hreflang="x-default" href="https://zsyu9779.github.io/dsh-desktop/">
   <meta property="og:type" content="website">
   <meta property="og:title" content="DeepSeek Harness Desktop — Lightweight by design">
-  <meta property="og:description" content="A 4–10 MB Wails desktop shell for the official DeepSeek Harness Web UI on macOS, Windows and Linux.">
+  <meta property="og:description" content="A 4–11 MB Wails desktop shell for the official DeepSeek Harness Web UI on macOS, Windows and Linux.">
   <meta property="og:url" content="https://zsyu9779.github.io/dsh-desktop/">
   <meta property="og:image" content="https://zsyu9779.github.io/dsh-desktop/assets/og.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="DeepSeek Harness Desktop — Lightweight by design">
-  <meta name="twitter:description" content="A 4–10 MB Wails desktop shell for DeepSeek Harness on macOS, Windows and Linux.">
+  <meta name="twitter:description" content="A 4–11 MB Wails desktop shell for DeepSeek Harness on macOS, Windows and Linux.">
   <meta name="twitter:image" content="https://zsyu9779.github.io/dsh-desktop/assets/og.png">
   <link rel="icon" href="assets/icon.png">
   <link rel="manifest" href="site.webmanifest">
@@ -32,7 +32,7 @@
     "applicationCategory": "DeveloperApplication",
     "applicationSubCategory": "AI coding agent desktop client",
     "operatingSystem": ["macOS", "Windows", "Linux"],
-    "softwareVersion": "0.1.4",
+    "softwareVersion": "0.1.5",
     "isAccessibleForFree": true,
     "license": "https://opensource.org/license/mit",
     "codeRepository": "https://github.com/zsyu9779/dsh-desktop",
@@ -74,7 +74,7 @@
         <h1>Harness power.<br><em>Desktop weight.</em></h1>
         <p class="lede">A lightweight Wails desktop shell for the official DeepSeek Harness Web UI. Native window, managed lifecycle, and three-platform releases—without a bundled browser runtime.</p>
         <div class="actions">
-          <a class="button button-primary" href="download/">Download v0.1.4</a>
+          <a class="button button-primary" href="download/">Download v0.1.5</a>
           <a class="button button-secondary" href="https://github.com/zsyu9779/dsh-desktop">View source</a>
         </div>
         <p class="microcopy">Requires Node.js 18+ · MIT licensed · Not affiliated with DeepSeek</p>
@@ -102,7 +102,7 @@
 
     <section class="proof" aria-label="Project facts">
       <div class="shell proof-grid">
-        <div class="proof-item"><strong>4–10 MB</strong><span>release packages</span></div>
+        <div class="proof-item"><strong>4–11 MB</strong><span>release packages</span></div>
         <div class="proof-item"><strong>3</strong><span>desktop platforms</span></div>
         <div class="proof-item"><strong>Wails + Go</strong><span>native host stack</span></div>
         <div class="proof-item"><strong>0</strong><span>forked upstream UI</span></div>
@@ -145,7 +145,7 @@
           <h2>Small download. Existing runtime.</h2>
         </div>
         <div>
-          <p class="section-intro">The app uses the operating system WebView and downloads the pinned DSH package through npx. That keeps the desktop package below 10 MB, but means Node.js 18+ must already be installed.</p>
+          <p class="section-intro">The app uses the operating system WebView and downloads the pinned DSH package through npx. That keeps the desktop packages around 4–11 MB, but means Node.js 18+ must already be installed.</p>
           <div class="actions">
             <a class="button button-secondary" href="compare/">See the comparison</a>
             <a class="button button-secondary" href="architecture/">Read the architecture</a>
@@ -160,26 +160,26 @@
           <span class="section-kicker">Download</span>
           <div>
             <h2>One release. Three platforms.</h2>
-            <p class="section-intro">Version 0.1.4 wraps <code>@deepseek-ai/dsh@0.1.0-rc.6</code>. Packages are built by GitHub Actions from the public source.</p>
+            <p class="section-intro">Version 0.1.5 wraps <code>@deepseek-ai/dsh@0.1.0-rc.6</code> and adds QR-paired phone access on a trusted LAN. Packages are built by GitHub Actions from the public source.</p>
           </div>
         </div>
         <div class="download-grid">
           <article class="download-card">
             <span class="platform">macOS</span>
             <h3>Universal DMG</h3>
-            <p>Apple Silicon and Intel in one 8.1 MB disk image. Currently unsigned.</p>
+            <p>Apple Silicon and Intel in one 8.9 MB disk image. Currently unsigned.</p>
             <a class="button button-secondary" href="https://github.com/zsyu9779/dsh-desktop/releases/latest/download/dsh-desktop-darwin-universal.dmg">Download DMG</a>
           </article>
           <article class="download-card">
             <span class="platform">Windows</span>
             <h3>Portable EXE</h3>
-            <p>A 9.8 MB executable for Windows amd64. Currently unsigned.</p>
+            <p>A 10.8 MB executable for Windows amd64. Currently unsigned.</p>
             <a class="button button-secondary" href="https://github.com/zsyu9779/dsh-desktop/releases/latest/download/dsh-desktop.exe">Download EXE</a>
           </article>
           <article class="download-card">
             <span class="platform">Linux</span>
             <h3>amd64 tar.gz</h3>
-            <p>A 3.8 MB archive for Linux amd64. Requires common WebKitGTK dependencies.</p>
+            <p>A 4.2 MB archive for Linux amd64. Requires common WebKitGTK dependencies.</p>
             <a class="button button-secondary" href="https://github.com/zsyu9779/dsh-desktop/releases/latest/download/dsh-desktop-linux-amd64.tar.gz">Download tar.gz</a>
           </article>
         </div>
@@ -221,7 +221,7 @@ window · launch · logs · shutdown</pre>
       <div class="footer-column">
         <strong>Project</strong>
         <a href="download/">Download</a>
-        <a href="releases/v0.1.4/">v0.1.4 notes</a>
+        <a href="releases/v0.1.5/">v0.1.5 notes</a>
         <a href="https://github.com/zsyu9779/dsh-desktop">GitHub</a>
       </div>
       <div class="footer-column">

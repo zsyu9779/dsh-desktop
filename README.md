@@ -2,6 +2,10 @@
   <img src="./assets/hero.jpg" alt="DeepSeek Harness Desktop：官网视觉背景上的原生应用窗口" width="100%">
 </p>
 
+<p align="center">
+  中文 · <a href="./README.en.md">English</a>
+</p>
+
 # DeepSeek Harness Desktop
 
 **Unofficial cross-platform desktop app for DeepSeek Harness — a native Wails shell for the DSH Web UI on macOS, Windows, and Linux.**
