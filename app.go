@@ -97,6 +97,16 @@ func (a *App) RegenerateRemoteToken() remoteStatus {
 	return s
 }
 
+// ListDevices returns the paired devices.
+func (a *App) ListDevices() []deviceIdentity {
+	return a.remote.listDevices()
+}
+
+// RevokeDevice revokes a paired device by ID, returning whether it existed.
+func (a *App) RevokeDevice(deviceID string) bool {
+	return a.remote.revokeDevice(deviceID)
+}
+
 // emitRemote pushes a remote status snapshot to the frontend.
 func (a *App) emitRemote(s remoteStatus) {
 	if a.ctx != nil {

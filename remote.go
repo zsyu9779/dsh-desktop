@@ -250,6 +250,26 @@ func (r *remoteManager) regenerateToken() remoteStatus {
 	return r.buildStatusLocked()
 }
 
+func (r *remoteManager) listDevices() []deviceIdentity {
+	r.mu.Lock()
+	devices := r.devices
+	r.mu.Unlock()
+	if devices == nil {
+		return nil
+	}
+	return devices.list()
+}
+
+func (r *remoteManager) revokeDevice(deviceID string) bool {
+	r.mu.Lock()
+	devices := r.devices
+	r.mu.Unlock()
+	if devices == nil {
+		return false
+	}
+	return devices.revoke(deviceID)
+}
+
 func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
@@ -279,7 +299,12 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		if _, err := cred.verifyJWT(c.Value); err != nil {
+		claims, err := cred.verifyJWT(c.Value)
+		if err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if !devices.exists(claims.DeviceID) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

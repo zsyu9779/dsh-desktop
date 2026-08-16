@@ -217,6 +217,34 @@ func (r *deviceRegistry) saveLocked() {
 	_ = os.WriteFile(r.path, data, 0o600)
 }
 
+func (r *deviceRegistry) list() []deviceIdentity {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	list := make([]deviceIdentity, 0, len(r.devices))
+	for _, d := range r.devices {
+		list = append(list, d)
+	}
+	return list
+}
+
+func (r *deviceRegistry) revoke(deviceID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.devices[deviceID]; !ok {
+		return false
+	}
+	delete(r.devices, deviceID)
+	r.saveLocked()
+	return true
+}
+
+func (r *deviceRegistry) exists(deviceID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.devices[deviceID]
+	return ok
+}
+
 // newDeviceID returns a random device identifier.
 func newDeviceID() string {
 	b := make([]byte, 16)
