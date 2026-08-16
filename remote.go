@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -231,19 +232,56 @@ func pickRemotePort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
+// firstLANIP returns the best-guess LAN IPv4 for the pairing URL, preferring
+// physical interfaces (en/eth/wl) over virtual ones (utun/vmnet) so a VPN or
+// VM adapter does not shadow the address the phone can actually reach.
 func firstLANIP() string {
-	addrs, err := net.InterfaceAddrs()
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	var fallback string
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		ip4 := ipv4For(iface)
+		if ip4 == "" || strings.HasPrefix(ip4, "169.254.") {
+			continue
+		}
+		if isPhysicalIface(iface.Name) {
+			return ip4
+		}
+		if fallback == "" {
+			fallback = ip4
+		}
+	}
+	return fallback
+}
+
+// ipv4For returns the first IPv4 address assigned to the interface.
+func ipv4For(iface net.Interface) string {
+	addrs, err := iface.Addrs()
 	if err != nil {
 		return ""
 	}
 	for _, a := range addrs {
-		ipnet, ok := a.(*net.IPNet)
-		if !ok || ipnet.IP.IsLoopback() {
-			continue
-		}
-		if ip4 := ipnet.IP.To4(); ip4 != nil {
-			return ip4.String()
+		if ipnet, ok := a.(*net.IPNet); ok {
+			if ip4 := ipnet.IP.To4(); ip4 != nil {
+				return ip4.String()
+			}
 		}
 	}
 	return ""
+}
+
+// isPhysicalIface reports whether the interface name looks like a physical
+// NIC (Ethernet/WiFi/WWAN) across macOS, Linux, and Windows.
+func isPhysicalIface(name string) bool {
+	for _, p := range []string{"en", "eth", "wl", "wlan", "wwan"} {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
 }
