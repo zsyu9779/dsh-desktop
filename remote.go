@@ -33,28 +33,58 @@ const (
 //go:embed remote_polyfill.js
 var polyfillScript []byte
 
+// privilegedMethods mirrors dsh's PRIVILEGED_METHODS (dsh-client-connection):
+// these are the methods the trust fence pins to loopback, so a remote Device
+// should not get them unless the Owner explicitly allows it.
+var privilegedMethods = map[string]bool{
+	"agentPreset.read":         true,
+	"agentPreset.copy":         true,
+	"agentPreset.openDocument": true,
+	"agentPreset.remove":       true,
+	"host.pickDirectory":       true,
+	"host.openPath":            true,
+	"settings.describe":        true,
+	"settings.openDocument":    true,
+	"settings.update":          true,
+	"settings.replace":         true,
+	"settings.mutate":          true,
+	"credentials.describe":     true,
+	"credentials.set":          true,
+	"credentials.unset":        true,
+	"llm.discoverModels":       true,
+}
+
+func isPrivilegedPath(path string) bool {
+	if !strings.HasPrefix(path, "/api/") {
+		return false
+	}
+	return privilegedMethods[strings.TrimPrefix(path, "/api/")]
+}
+
 type remoteStatus struct {
-	Enabled       bool   `json:"enabled"`
-	URL           string `json:"url"`
-	PairingCode   string `json:"pairingCode"`
-	HostPublicKey string `json:"hostPublicKey"`
-	QR            string `json:"qr"`
-	Port          int    `json:"port"`
-	Message       string `json:"message"`
+	Enabled         bool   `json:"enabled"`
+	AllowPrivileged bool   `json:"allowPrivileged"`
+	URL             string `json:"url"`
+	PairingCode     string `json:"pairingCode"`
+	HostPublicKey   string `json:"hostPublicKey"`
+	QR              string `json:"qr"`
+	Port            int    `json:"port"`
+	Message         string `json:"message"`
 }
 
 type remoteManager struct {
 	app *App
 
-	mu            sync.Mutex
-	enabled       bool
-	pairingCode   string
-	pairingExpiry time.Time
-	cred          *hostCredential
-	devices       *deviceRegistry
-	port          int
-	target        string
-	server        *http.Server
+	mu              sync.Mutex
+	enabled         bool
+	allowPrivileged bool
+	pairingCode     string
+	pairingExpiry   time.Time
+	cred            *hostCredential
+	devices         *deviceRegistry
+	port            int
+	target          string
+	server          *http.Server
 }
 
 func newRemoteManager(app *App) *remoteManager {
@@ -68,7 +98,7 @@ func (r *remoteManager) status() remoteStatus {
 }
 
 func (r *remoteManager) buildStatusLocked() remoteStatus {
-	s := remoteStatus{Enabled: r.enabled, PairingCode: r.pairingCode, Port: r.port}
+	s := remoteStatus{Enabled: r.enabled, PairingCode: r.pairingCode, Port: r.port, AllowPrivileged: r.allowPrivileged}
 	if r.cred != nil {
 		s.HostPublicKey = r.cred.publicKeyB64()
 	}
@@ -270,6 +300,12 @@ func (r *remoteManager) revokeDevice(deviceID string) bool {
 	return devices.revoke(deviceID)
 }
 
+func (r *remoteManager) setAllowPrivileged(v bool) {
+	r.mu.Lock()
+	r.allowPrivileged = v
+	r.mu.Unlock()
+}
+
 func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
@@ -278,6 +314,7 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 		pairingExpiry := r.pairingExpiry
 		cred := r.cred
 		devices := r.devices
+		allowPrivileged := r.allowPrivileged
 		r.mu.Unlock()
 
 		if !enabled || cred == nil {
@@ -305,6 +342,10 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		if !devices.exists(claims.DeviceID) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if isPrivilegedPath(req.URL.Path) && !allowPrivileged {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

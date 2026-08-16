@@ -107,6 +107,13 @@ func (a *App) RevokeDevice(deviceID string) bool {
 	return a.remote.revokeDevice(deviceID)
 }
 
+// SetAllowPrivileged toggles whether remote Devices may call sensitive methods
+// (settings / credentials / agentPreset, etc.).
+func (a *App) SetAllowPrivileged(enabled bool) {
+	a.remote.setAllowPrivileged(enabled)
+	a.emitRemote(a.remote.status())
+}
+
 // emitRemote pushes a remote status snapshot to the frontend.
 func (a *App) emitRemote(s remoteStatus) {
 	if a.ctx != nil {
