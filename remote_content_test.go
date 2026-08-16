@@ -32,7 +32,7 @@ func newTestRemoteWith(t *testing.T, handler http.HandlerFunc) (*remoteManager, 
 		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
 		if err == nil {
 			_ = conn.Close()
-			return m, "http://" + addr
+			return m, "https://" + addr
 		}
 		time.Sleep(50 * time.Millisecond)
 	}

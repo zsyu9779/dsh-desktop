@@ -14,6 +14,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -258,4 +259,59 @@ func newDeviceID() string {
 func deviceFingerprint(deviceID string) string {
 	sum := sha256.Sum256([]byte(deviceID))
 	return hex.EncodeToString(sum[:8])
+}
+
+// issueLeafCert signs a short-lived server certificate with the Host CA for the
+// LAN listener, and returns its SHA-256 fingerprint (hex) for the phone to pin
+// on first use.
+func (c *hostCredential) issueLeafCert(ip net.IP) (certPEM, keyPEM []byte, fingerprint string, err error) {
+	caBlock, _ := pem.Decode(c.CACertPEM)
+	if caBlock == nil {
+		return nil, nil, "", fmt.Errorf("bad CA cert PEM")
+	}
+	caCert, err := x509.ParseCertificate(caBlock.Bytes)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	caKeyBlock, _ := pem.Decode(c.CAKeyPEM)
+	if caKeyBlock == nil {
+		return nil, nil, "", fmt.Errorf("bad CA key PEM")
+	}
+	caKey, err := x509.ParseECPrivateKey(caKeyBlock.Bytes)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, nil, "", err
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: "dsh-desktop.local"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().AddDate(1, 0, 0),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     []string{"dsh-desktop.local"},
+	}
+	if ip != nil {
+		tmpl.IPAddresses = []net.IP{ip}
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &leafKey.PublicKey, caKey)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	keyDER, err := x509.MarshalECPrivateKey(leafKey)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	sum := sha256.Sum256(der)
+	return certPEM, keyPEM, hex.EncodeToString(sum[:]), nil
 }

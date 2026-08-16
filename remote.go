@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"crypto/tls"
 	_ "embed"
 	"encoding/base64"
 	"fmt"
@@ -67,6 +68,7 @@ type remoteStatus struct {
 	URL             string `json:"url"`
 	PairingCode     string `json:"pairingCode"`
 	HostPublicKey   string `json:"hostPublicKey"`
+	CertFingerprint string `json:"certFingerprint"`
 	QR              string `json:"qr"`
 	Port            int    `json:"port"`
 	Message         string `json:"message"`
@@ -81,6 +83,7 @@ type remoteManager struct {
 	pairingCode     string
 	pairingExpiry   time.Time
 	cred            *hostCredential
+	certFingerprint string
 	devices         *deviceRegistry
 	port            int
 	target          string
@@ -98,13 +101,13 @@ func (r *remoteManager) status() remoteStatus {
 }
 
 func (r *remoteManager) buildStatusLocked() remoteStatus {
-	s := remoteStatus{Enabled: r.enabled, PairingCode: r.pairingCode, Port: r.port, AllowPrivileged: r.allowPrivileged}
+	s := remoteStatus{Enabled: r.enabled, PairingCode: r.pairingCode, Port: r.port, AllowPrivileged: r.allowPrivileged, CertFingerprint: r.certFingerprint}
 	if r.cred != nil {
 		s.HostPublicKey = r.cred.publicKeyB64()
 	}
 	if r.enabled {
 		if ip := firstLANIP(); ip != "" {
-			s.URL = fmt.Sprintf("http://%s:%d", ip, r.port)
+			s.URL = fmt.Sprintf("https://%s:%d", ip, r.port)
 		}
 		s.QR = r.qrLocked()
 		s.Message = "remote enabled"
@@ -122,7 +125,7 @@ func (r *remoteManager) qrLocked() string {
 	if ip == "" {
 		return ""
 	}
-	pairingURL := fmt.Sprintf("http://%s:%d/?pair=%s", ip, r.port, r.pairingCode)
+	pairingURL := fmt.Sprintf("https://%s:%d/?pair=%s", ip, r.port, r.pairingCode)
 	png, err := qrcode.Encode(pairingURL, qrcode.Medium, 256)
 	if err != nil {
 		return ""
@@ -147,6 +150,19 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 	}
 	r.cred = cred
 	r.devices = newDeviceRegistry(filepath.Join(stateDir(), "devices.json"))
+
+	var certIP net.IP
+	if ipStr := firstLANIP(); ipStr != "" {
+		certIP = net.ParseIP(ipStr)
+	}
+	leafCertPEM, leafKeyPEM, fingerprint, err := cred.issueLeafCert(certIP)
+	if err != nil {
+		return r.buildStatusLocked(), err
+	}
+	tlsCert, err := tls.X509KeyPair(leafCertPEM, leafKeyPEM)
+	if err != nil {
+		return r.buildStatusLocked(), err
+	}
 
 	code, err := randomToken(12)
 	if err != nil {
@@ -221,6 +237,7 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 		Addr:              fmt.Sprintf("0.0.0.0:%d", port),
 		Handler:           r.authMiddleware(proxy),
 		ReadHeaderTimeout: 10 * time.Second,
+		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{tlsCert}},
 	}
 
 	r.enabled = true
@@ -228,10 +245,11 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 	r.pairingExpiry = time.Now().Add(pairingCodeTTL)
 	r.port = port
 	r.target = target
+	r.certFingerprint = fingerprint
 	r.server = server
 
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 			r.logf("remote server error: %v", err)
 			r.mu.Lock()
 			if r.server == server {

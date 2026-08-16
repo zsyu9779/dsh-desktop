@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -33,7 +34,7 @@ func newTestRemote(t *testing.T) (*remoteManager, string) {
 		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
 		if err == nil {
 			_ = conn.Close()
-			return m, "http://" + addr
+			return m, "https://" + addr
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -43,6 +44,9 @@ func newTestRemote(t *testing.T) (*remoteManager, string) {
 
 func noRedirectClient() *http.Client {
 	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 }
