@@ -1,0 +1,21 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="640" gradientUnits="userSpaceOnUse"><stop stop-color="#071122"/><stop offset="0.58" stop-color="#113264"/><stop offset="1" stop-color="#0A1730"/></linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(360 280) rotate(28) scale(430 350)" gradientUnits="userSpaceOnUse"><stop stop-color="#4F7FFF" stop-opacity="0.35"/><stop offset="1" stop-color="#4F7FFF" stop-opacity="0"/></radialGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#B9D4FF" stroke-opacity="0.08"/></pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="150%" height="160%"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#020617" flood-opacity="0.55"/></filter>
+    <clipPath id="canvas"><rect width="1280" height="640" rx="0"/></clipPath>
+  </defs>
+  <g clip-path="url(#canvas)">
+    <rect width="1280" height="640" fill="url(#bg)"/><rect width="1280" height="640" fill="url(#grid)"/><rect width="850" height="640" fill="url(#glow)"/>
+    <rect x="0" y="0" width="790" height="640" fill="url(#bg)" fill-opacity="0.18"/>
+    <image href="screenshot.png" x="672" y="60" width="720" height="516"/>
+    <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
+      <rect x="64" y="62" width="64" height="64" rx="18" fill="#4D6BFE"/><text x="96" y="103" fill="#FFF" font-size="20" font-weight="750" text-anchor="middle">DSH</text>
+      <text x="150" y="89" fill="#BFD2FF" font-size="18" font-weight="700" letter-spacing="1.2">DESKTOP</text><text x="150" y="116" fill="#7F9BC7" font-size="15">Native shell for DeepSeek Harness</text>
+      <text x="62" y="254" fill="#FFF" font-size="62" font-weight="760" letter-spacing="-2.5">DeepSeek Harness</text><text x="62" y="325" fill="#FFF" font-size="62" font-weight="760" letter-spacing="-2.5">Desktop</text>
+      <text x="66" y="400" fill="#D6E2F7" font-size="29" font-weight="650">~9 MB · No Electron</text><text x="66" y="445" fill="#9DB2D1" font-size="21">Official npm package · LAN QR remote</text>
+      <g font-size="16" font-weight="650"><rect x="66" y="502" width="122" height="40" rx="20" fill="#16305A" stroke="#315A97"/><text x="127" y="528" fill="#C8DBFF" text-anchor="middle">macOS</text><rect x="202" y="502" width="132" height="40" rx="20" fill="#16305A" stroke="#315A97"/><text x="268" y="528" fill="#C8DBFF" text-anchor="middle">Windows</text><rect x="348" y="502" width="116" height="40" rx="20" fill="#16305A" stroke="#315A97"/><text x="406" y="528" fill="#C8DBFF" text-anchor="middle">Linux</text></g>
+    </g>
+  </g>
+</svg>

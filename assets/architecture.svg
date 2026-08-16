@@ -1,0 +1,58 @@
+<svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1020"/>
+      <stop offset="1" stop-color="#101827"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="158" y1="90" x2="1042" y2="270" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6EA8FE"/>
+      <stop offset="1" stop-color="#6C63FF"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="360" rx="24" fill="url(#bg)"/>
+  <circle cx="105" cy="58" r="150" fill="#315EFB" fill-opacity="0.08"/>
+  <circle cx="1110" cy="330" r="180" fill="#7657FF" fill-opacity="0.08"/>
+
+  <text x="600" y="48" fill="#F8FAFC" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="23" font-weight="700" text-anchor="middle">A thin native shell around the official DeepSeek Harness</text>
+
+  <g filter="url(#shadow)">
+    <rect x="66" y="88" width="286" height="154" rx="18" fill="#151E31" stroke="#2A3955"/>
+    <rect x="457" y="88" width="286" height="154" rx="18" fill="#151E31" stroke="url(#accent)" stroke-width="2"/>
+    <rect x="848" y="88" width="286" height="154" rx="18" fill="#151E31" stroke="#2A3955"/>
+  </g>
+
+  <rect x="92" y="112" width="44" height="44" rx="12" fill="#26395D"/>
+  <path d="M103 123H125V143H103V123Z" stroke="#8EB7FF" stroke-width="2"/>
+  <path d="M103 129H125" stroke="#8EB7FF" stroke-width="2"/>
+  <circle cx="108" cy="126" r="1.5" fill="#8EB7FF"/>
+  <text x="92" y="183" fill="#F8FAFC" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="21" font-weight="700">Native window</text>
+  <text x="92" y="211" fill="#AEBBD0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16">Wails + system WebView</text>
+
+  <rect x="483" y="112" width="44" height="44" rx="12" fill="#2B3470"/>
+  <path d="M494 134H516M510 128L516 134L510 140" stroke="#A7A4FF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="483" y="183" fill="#F8FAFC" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="21" font-weight="700">Managed launcher</text>
+  <text x="483" y="211" fill="#AEBBD0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16">start · wait · redirect · clean up</text>
+
+  <rect x="874" y="112" width="44" height="44" rx="12" fill="#26395D"/>
+  <path d="M884 135L889 140L908 121" stroke="#8EB7FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="874" y="183" fill="#F8FAFC" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="21" font-weight="700">Official DSH Web UI</text>
+  <text x="874" y="211" fill="#AEBBD0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16">unchanged @deepseek-ai/dsh</text>
+
+  <path d="M369 165H438" stroke="#64748B" stroke-width="2" stroke-linecap="round"/>
+  <path d="M429 157L438 165L429 173" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M760 165H829" stroke="#64748B" stroke-width="2" stroke-linecap="round"/>
+  <path d="M820 157L829 165L820 173" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="600" text-anchor="middle">
+    <rect x="313" y="281" width="160" height="40" rx="20" fill="#17223A" stroke="#2D4168"/>
+    <text x="393" y="306" fill="#BBD2FF">~9 MB app</text>
+    <rect x="499" y="281" width="202" height="40" rx="20" fill="#17223A" stroke="#2D4168"/>
+    <text x="600" y="306" fill="#BBD2FF">no bundled Chromium</text>
+    <rect x="727" y="281" width="160" height="40" rx="20" fill="#17223A" stroke="#2D4168"/>
+    <text x="807" y="306" fill="#BBD2FF">no upstream fork</text>
+  </g>
+</svg>

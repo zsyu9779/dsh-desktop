@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./assets/hero-zh.jpg" alt="DeepSeek Harness Desktop：约 9 MB、无 Electron、支持局域网扫码远程" width="100%">
+</p>
+
 # DeepSeek Harness Desktop
 
 **Unofficial cross-platform desktop app for DeepSeek Harness — a native Wails shell for the DSH Web UI on macOS, Windows, and Linux.**
@@ -27,11 +31,26 @@ DeepSeek Harness Desktop 是 DeepSeek Harness 的桌面启动器和原生容器�
 - **自动启动 DSH**：通过 `npx` 拉取并运行固定版本的 `@deepseek-ai/dsh`。
 - **可靠的进程管理**：关闭窗口或退出应用时清理 `npx → node → dsh` 进程树。
 - **稳定的窗口恢复**：保留 Wails 原生容器，修复 macOS 最小化后恢复白屏的问题。
+- **局域网手机远程**：同一 Wi-Fi 下扫码即可在手机浏览器操控当前 DeepSeek Harness。
 - **启动状态与错误提示**：显示环境检查、首次下载、服务启动和失败状态。
 - **日志与故障排查**：可在启动页查看日志，也会写入本地日志文件。
 - **可配置工作目录**：支持通过环境变量覆盖命令、工作区和 DSH Home。
 
 DeepSeek Harness 的对话、模型、插件、会话和设置能力均由上游项目提供。本项目只负责桌面容器、启动流程和子进程生命周期。
+
+## 手机远程（局域网）
+
+电脑和手机连在同一个可信 Wi-Fi 后，在启动面板点击「开启」，用手机扫描二维码即可打开当前 DeepSeek Harness。无需账号、无需云端中继，任务、会话和文件仍留在电脑上。
+
+<p align="center">
+  <img src="./assets/remote-control.png" alt="DeepSeek Harness Desktop 局域网手机扫码远程控制" width="82%">
+</p>
+
+- 通过带随机 token 的二维码完成配对，扫码后写入 HttpOnly Cookie
+- 可以随时重新生成配对码，让此前的手机会话立即失效
+- 关闭手机远程后，局域网代理和当前配对凭据会一并停止
+
+> 当前版本是面向**可信局域网**的 HTTP 直连，不是公网远程访问。请勿在咖啡厅、公司访客网络等不可信 Wi-Fi 中开启。
 
 ## 下载与安装
 
@@ -161,8 +180,8 @@ DeepSeek Harness 通过 npm 发布。桌面应用使用 Node.js 和 `npx` 下载
 推送 `v*` 标签会触发 GitHub Actions，为 macOS universal、Windows amd64 和 Linux amd64 构建产物，并创建 GitHub Release。
 
 ```bash
-git tag v0.1.3
-git push origin v0.1.3
+git tag v0.1.5
+git push origin v0.1.5
 ```
 
 更新 DeepSeek Harness 版本时，请修改 `dsh.go` 中的 `dshPackage` 常量并完成真实启动测试。
