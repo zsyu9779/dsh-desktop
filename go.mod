@@ -36,6 +36,4 @@ require (
 	golang.org/x/text v0.22.0 // indirect
 )
 
-replace github.com/skip2/go-qrcode => ./third_party/go-qrcode
-
 // replace github.com/wailsapp/wails/v2 v2.11.0 => /Users/zhangshiyu/go/pkg/mod
