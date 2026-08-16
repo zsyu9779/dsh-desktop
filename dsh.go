@@ -469,12 +469,14 @@ func nodeBinPaths() []string {
 func augmentedEnv() []string {
 	aug := strings.Join(nodeBinPaths(), string(os.PathListSeparator))
 	env := os.Environ()
-	out := make([]string, 0, len(env)+1)
+	out := make([]string, 0, len(env)+2)
 	set := false
 	for _, kv := range env {
 		if strings.HasPrefix(kv, "PATH=") {
 			out = append(out, "PATH="+aug)
 			set = true
+		} else if strings.HasPrefix(kv, "SSH_CONNECTION=") {
+			// dropped; we inject our own value below
 		} else {
 			out = append(out, kv)
 		}
@@ -482,6 +484,11 @@ func augmentedEnv() []string {
 	if !set {
 		out = append(out, "PATH="+aug)
 	}
+	// Force the browse-based directory picker instead of the native macOS
+	// dialog. dsh's native picker is loopback-pinned and 403s for phone
+	// clients; the browse picker lists directories over the API and works
+	// everywhere (desktop included).
+	out = append(out, "SSH_CONNECTION=dsh-desktop")
 	return out
 }
 
