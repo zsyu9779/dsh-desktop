@@ -374,3 +374,26 @@ body {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+.notify-filter {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.notify-filter-btn.is-active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.notify-item.is-read {
+    opacity: 0.55;
+}
+
+.notify-empty {
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+}

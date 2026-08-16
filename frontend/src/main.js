@@ -33,6 +33,7 @@ const notifyEl = document.getElementById('notify');
 const notifyList = document.getElementById('notify-list');
 
 let notifications = [];
+let notifyFilter = '';
 
 function setBusy(busy) {
     spinner.classList.toggle('hidden', !busy);
@@ -162,9 +163,10 @@ function typeLabel(t) {
 
 function renderNotifications() {
     notifyList.innerHTML = '';
-    notifications.forEach((n) => {
+    const filtered = notifications.filter((n) => !notifyFilter || n.type === notifyFilter);
+    filtered.forEach((n) => {
         const li = document.createElement('li');
-        li.className = 'notify-item';
+        li.className = 'notify-item' + (n.read ? ' is-read' : '');
         const badge = document.createElement('span');
         badge.className = 'notify-badge notify-badge-' + (n.type || '');
         badge.textContent = typeLabel(n.type);
@@ -174,15 +176,24 @@ function renderNotifications() {
         li.appendChild(badge);
         li.appendChild(text);
         li.addEventListener('click', () => {
+            n.read = true;
+            renderNotifications();
             if (n.deepLink) showHarness(n.deepLink);
         });
         notifyList.appendChild(li);
     });
+    if (filtered.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'notify-empty';
+        empty.textContent = '(暂无通知)';
+        notifyList.appendChild(empty);
+    }
 }
 
 function handleNotification(n) {
     if (!n) return;
-    notifications.unshift(n);
+    notifications.unshift(Object.assign({}, n, { read: false }));
+    notifications.sort((a, b) => (b.ts || 0) - (a.ts || 0));
     if (notifications.length > 50) notifications.length = 50;
     renderNotifications();
     notifyEl.hidden = false;
@@ -280,6 +291,14 @@ document.getElementById('btn-notify-clear').addEventListener('click', () => {
     notifications.length = 0;
     renderNotifications();
     notifyEl.hidden = true;
+});
+
+document.querySelectorAll('.notify-filter-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        notifyFilter = btn.dataset.type || '';
+        document.querySelectorAll('.notify-filter-btn').forEach((b) => b.classList.toggle('is-active', b === btn));
+        renderNotifications();
+    });
 });
 
 runtime.EventsOn('status', handleStatus);
