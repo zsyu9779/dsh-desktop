@@ -1,0 +1,60 @@
+{
+  "name": "dsh-plugin-open-editor",
+  "version": "0.1.0",
+  "description": "Open the current DSH project in your favorite editor — one click for the default (VS Code), a picker for Cursor, Windsurf, Trae, JetBrains IDEs, Sublime Text, the OS file manager, and custom commands.",
+  "contributors": [
+    "Civitasv"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "client.js",
+    "README.md",
+    "LICENSE",
+    "install.sh",
+    "install.ps1"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-api-remotes"
+      ],
+      "immediately": true
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  },
+  "license": "MIT"
+}

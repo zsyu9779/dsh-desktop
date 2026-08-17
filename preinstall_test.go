@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,8 +46,9 @@ func TestRunPreinstallInstallsAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first run: %v", err)
 	}
-	if !strings.Contains(status, "installed 1") {
-		t.Fatalf("first run status = %q, want installed 1", status)
+	wantStatus := fmt.Sprintf("installed %d", len(preinstalledPlugins))
+	if !strings.Contains(status, wantStatus) {
+		t.Fatalf("first run status = %q, want %q", status, wantStatus)
 	}
 
 	pkg := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes", "package.json")

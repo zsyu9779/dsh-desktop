@@ -31,6 +31,8 @@ type preinstallPlugin struct {
 }
 
 // preinstalledPlugins is the fixed set of plugins shipped by this build.
+// Order matters: open-editor is listed before diff-review (its dependent), and
+// each block is appended to cordis.patch.yml in this order.
 var preinstalledPlugins = []preinstallPlugin{
 	{
 		ID:   "file-changes",
@@ -39,6 +41,38 @@ var preinstalledPlugins = []preinstallPlugin{
 		Insert: `- insert:
     - id: file-changes
       name: dsh-file-changes
+`,
+	},
+	{
+		ID:   "dsh-subagent-max",
+		Name: "@aaravarr/dsh-subagent-max",
+		Dir:  "dsh-subagent-max",
+		Insert: `- insert:
+    - id: dsh-subagent-max
+      name: '@aaravarr/dsh-subagent-max'
+      config:
+        subagentProvider: spawn
+        toolName: subagent_with_model
+        backgroundMode: continuable
+        maxDepth: 3
+`,
+	},
+	{
+		ID:   "open-editor",
+		Name: "dsh-plugin-open-editor",
+		Dir:  "open-editor",
+		Insert: `- insert:
+    - id: open-editor
+      name: dsh-plugin-open-editor
+`,
+	},
+	{
+		ID:   "diff-review",
+		Name: "dsh-plugin-diff-review",
+		Dir:  "diff-review",
+		Insert: `- insert:
+    - id: diff-review
+      name: dsh-plugin-diff-review
 `,
 	},
 }
