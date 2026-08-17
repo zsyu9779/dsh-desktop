@@ -423,7 +423,8 @@ func (m *dshManager) buildCommand(ctx context.Context, port int, nodeInstall nod
 	cmd := exec.CommandContext(ctx, binPath, args...)
 
 	// Working directory: the user's project, overridable via DSH_WORKSPACE.
-	if wd := workspaceDir(); wd != "" {
+	wd := workspaceDir()
+	if wd != "" {
 		cmd.Dir = wd
 	}
 
@@ -433,6 +434,12 @@ func (m *dshManager) buildCommand(ctx context.Context, port int, nodeInstall nod
 	if customCommand == "" {
 		cmd.Env = withEnv(cmd.Env, "NPM_CONFIG_CACHE", managedNPMCacheDir())
 		cmd.Env = withEnv(cmd.Env, "NPM_CONFIG_YES", "true")
+	}
+	// Expose the resolved workspace to the child so workspace-bound plugins
+	// (e.g. the file-changes reveal route) can validate against it instead of
+	// falling back to HOME alone.
+	if wd != "" {
+		cmd.Env = withEnv(cmd.Env, "DSH_WORKSPACE", wd)
 	}
 	return cmd, nil
 }
