@@ -25,6 +25,14 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	enableNativeFullscreen()
+	// Pre-install the shipped plugins before the harness boots so it picks
+	// them up on first load. Failure is non-fatal: the shell still starts and
+	// only loses the preinstalled plugins, so log and continue.
+	if status, err := runPreinstall(a.dsh.logf); err != nil {
+		a.dsh.logf("preinstall: %v", err)
+	} else {
+		a.dsh.logf("%s", status)
+	}
 	a.dsh.start()
 }
 

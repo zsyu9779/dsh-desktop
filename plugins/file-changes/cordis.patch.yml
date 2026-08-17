@@ -1,0 +1,7 @@
+# dsh-file-changes bundle patch: one dual-half row.
+# The host half registers the /api/file-changes/reveal and /api/file-changes/changes
+# HTTP routes and taps nested Code Mode dispatches; the client half (dsh.client)
+# joins the browser roster and renders the turn-tail file-change panel.
+- insert:
+    - id: file-changes
+      name: 'dsh-file-changes'
