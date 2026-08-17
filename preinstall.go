@@ -24,6 +24,9 @@ type preinstallPlugin struct {
 	// Dir is the embedded directory under plugins/ that holds the plugin's
 	// runtime files (package.json, lib/, client, cordis.patch.yml, ...).
 	Dir string
+	// Version is the vendored plugin version; a bump re-copies on next run so
+	// a newer desktop build upgrades an already-installed plugin.
+	Version string
 	// Insert is the full cordis.patch.yml block to append (including the
 	// leading "- insert:" line and trailing newline), or "" when the plugin
 	// needs no extra config in the patch layer.
@@ -35,18 +38,20 @@ type preinstallPlugin struct {
 // each block is appended to cordis.patch.yml in this order.
 var preinstalledPlugins = []preinstallPlugin{
 	{
-		ID:   "file-changes",
-		Name: "dsh-file-changes",
-		Dir:  "file-changes",
+		ID:      "file-changes",
+		Name:    "dsh-file-changes",
+		Dir:     "file-changes",
+		Version: "0.1.0",
 		Insert: `- insert:
     - id: file-changes
       name: dsh-file-changes
 `,
 	},
 	{
-		ID:   "dsh-subagent-max",
-		Name: "@aaravarr/dsh-subagent-max",
-		Dir:  "dsh-subagent-max",
+		ID:      "dsh-subagent-max",
+		Name:    "@aaravarr/dsh-subagent-max",
+		Dir:     "dsh-subagent-max",
+		Version: "0.1.1",
 		Insert: `- insert:
     - id: dsh-subagent-max
       name: '@aaravarr/dsh-subagent-max'
@@ -58,18 +63,20 @@ var preinstalledPlugins = []preinstallPlugin{
 `,
 	},
 	{
-		ID:   "open-editor",
-		Name: "dsh-plugin-open-editor",
-		Dir:  "open-editor",
+		ID:      "open-editor",
+		Name:    "dsh-plugin-open-editor",
+		Dir:     "open-editor",
+		Version: "0.1.0",
 		Insert: `- insert:
     - id: open-editor
       name: dsh-plugin-open-editor
 `,
 	},
 	{
-		ID:   "diff-review",
-		Name: "dsh-plugin-diff-review",
-		Dir:  "diff-review",
+		ID:      "diff-review",
+		Name:    "dsh-plugin-diff-review",
+		Dir:     "diff-review",
+		Version: "0.1.0",
 		Insert: `- insert:
     - id: diff-review
       name: dsh-plugin-diff-review
@@ -79,9 +86,14 @@ var preinstalledPlugins = []preinstallPlugin{
 
 const preinstallStateFile = "preinstall-state.json"
 
+type installedPlugin struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
 type preinstallState struct {
-	SchemaVersion int      `json:"schemaVersion"`
-	Installed     []string `json:"installed"` // plugin Names this desktop install created
+	SchemaVersion int               `json:"schemaVersion"`
+	Installed     []installedPlugin `json:"installed"` // plugins this desktop install created
 }
 
 // resolveDSHHome returns the DeepSeek Harness home directory, honoring DSH_HOME.
@@ -228,24 +240,35 @@ func runPreinstall(logf func(format string, args ...any)) (string, error) {
 	statePath := preinstallStatePath()
 
 	state := loadPreinstallState(statePath)
-	owned := make(map[string]bool, len(state.Installed))
-	for _, n := range state.Installed {
-		owned[n] = true
+	owned := make(map[string]string, len(state.Installed))
+	for _, ip := range state.Installed {
+		if ip.Name != "" {
+			owned[ip.Name] = ip.Version
+		}
 	}
 
 	var createdDirs []string
 	var backupPath string
-	newlyInstalled := 0
+	changed := 0
 
 	for _, p := range preinstalledPlugins {
 		target := filepath.Join(profileModules, filepath.FromSlash(p.Name))
 
 		if _, err := os.Lstat(target); err == nil {
-			if owned[p.Name] {
-				continue // already ours from a previous run
+			version, isOurs := owned[p.Name]
+			if isOurs {
+				if version == p.Version {
+					continue // already ours at this version
+				}
+				// Version bump: replace our previous copy.
+				if err := os.RemoveAll(target); err != nil {
+					rollbackPreinstall(createdDirs, backupPath, patchPath)
+					return "", fmt.Errorf("preinstall %s: remove old: %w", p.Name, err)
+				}
+			} else {
+				logf("preinstall: %s already present, leaving user install untouched", p.Name)
+				continue
 			}
-			logf("preinstall: %s already present, leaving user install untouched", p.Name)
-			continue
 		}
 
 		if err := copyEmbeddedDir(p.Dir, target); err != nil {
@@ -253,37 +276,129 @@ func runPreinstall(logf func(format string, args ...any)) (string, error) {
 			return "", fmt.Errorf("preinstall %s: copy: %w", p.Name, err)
 		}
 		createdDirs = append(createdDirs, target)
-		owned[p.Name] = true
-		newlyInstalled++
+		owned[p.Name] = p.Version
+		changed++
 		logf("preinstall: installed %s", p.Name)
 
 		if p.Insert != "" {
-			changed, err := appendPatch(patchPath, p.ID, p.Insert, &backupPath)
+			appended, err := appendPatch(patchPath, p.ID, p.Insert, &backupPath)
 			if err != nil {
 				rollbackPreinstall(createdDirs, backupPath, patchPath)
 				return "", fmt.Errorf("preinstall %s: patch: %w", p.Name, err)
 			}
-			if changed {
+			if appended {
 				logf("preinstall: registered %s in cordis.patch.yml", p.Name)
 			}
 		}
 	}
 
-	if newlyInstalled > 0 || len(state.Installed) != len(owned) {
-		names := make([]string, 0, len(owned))
-		for n := range owned {
-			names = append(names, n)
+	if changed > 0 {
+		entries := make([]installedPlugin, 0, len(owned))
+		for name, version := range owned {
+			entries = append(entries, installedPlugin{Name: name, Version: version})
 		}
-		// Stable order for reproducible state files.
-		sort.Strings(names)
-		if err := savePreinstallState(statePath, preinstallState{SchemaVersion: 1, Installed: names}); err != nil {
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+		if err := savePreinstallState(statePath, preinstallState{SchemaVersion: 1, Installed: entries}); err != nil {
 			rollbackPreinstall(createdDirs, backupPath, patchPath)
 			return "", fmt.Errorf("preinstall: save state: %w", err)
 		}
 	}
 
-	if newlyInstalled == 0 {
+	if changed == 0 {
 		return "preinstall: up to date", nil
 	}
-	return fmt.Sprintf("preinstall: installed %d plugin(s)", newlyInstalled), nil
+	return fmt.Sprintf("preinstall: installed %d plugin(s)", changed), nil
+}
+
+// removePatchBlock deletes one insert block (the exact string we appended)
+// from cordis.patch.yml, with a backup written before the edit.
+func removePatchBlock(patchPath, block string) error {
+	raw, err := os.ReadFile(patchPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	content := string(raw)
+	idx := strings.Index(content, block)
+	if idx < 0 {
+		return nil
+	}
+	bak := patchPath + ".bak-dsh-desktop"
+	if err := os.WriteFile(bak, raw, 0o644); err != nil {
+		return err
+	}
+	// Drop the block plus any blank separator lines immediately before it.
+	start := idx
+	for start > 0 && content[start-1] == '\n' {
+		start--
+	}
+	out := content[:start] + content[idx+len(block):]
+	out = strings.TrimLeft(out, "\n")
+	if err := os.WriteFile(patchPath, []byte(out), 0o644); err != nil {
+		return err
+	}
+	_ = os.Remove(bak)
+	return nil
+}
+
+// uninstallPreinstalledPlugin removes one preinstalled plugin: its node_modules
+// directory (only when this desktop created it) and its cordis.patch.yml insert
+// block. It is the single-plugin inverse of runPreinstall.
+func uninstallPreinstalledPlugin(id string, logf func(format string, args ...any)) error {
+	var p *preinstallPlugin
+	for i := range preinstalledPlugins {
+		if preinstalledPlugins[i].ID == id {
+			p = &preinstalledPlugins[i]
+			break
+		}
+	}
+	if p == nil {
+		return fmt.Errorf("unknown preinstalled plugin %q", id)
+	}
+
+	dshHome := resolveDSHHome()
+	if dshHome == "" {
+		return fmt.Errorf("cannot resolve DSH home")
+	}
+	profileModules := filepath.Join(dshHome, "profiles", "node_modules")
+	patchPath := filepath.Join(dshHome, "profiles", "web", "cordis.patch.yml")
+	statePath := preinstallStatePath()
+
+	state := loadPreinstallState(statePath)
+	owned := false
+	for _, ip := range state.Installed {
+		if ip.Name == p.Name {
+			owned = true
+			break
+		}
+	}
+
+	// Only remove the directory when we created it (tracked in state).
+	if owned {
+		target := filepath.Join(profileModules, filepath.FromSlash(p.Name))
+		if err := os.RemoveAll(target); err != nil {
+			return fmt.Errorf("remove %s: %w", p.Name, err)
+		}
+		logf("uninstall: removed %s", p.Name)
+	}
+
+	if p.Insert != "" {
+		if err := removePatchBlock(patchPath, p.Insert); err != nil {
+			return fmt.Errorf("unpatch %s: %w", p.Name, err)
+		}
+		logf("uninstall: removed %s from cordis.patch.yml", p.Name)
+	}
+
+	entries := make([]installedPlugin, 0, len(state.Installed))
+	for _, ip := range state.Installed {
+		if ip.Name != p.Name {
+			entries = append(entries, ip)
+		}
+	}
+	if err := savePreinstallState(statePath, preinstallState{SchemaVersion: 1, Installed: entries}); err != nil {
+		return fmt.Errorf("save state: %w", err)
+	}
+	return nil
 }

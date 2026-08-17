@@ -79,6 +79,94 @@ func TestRunPreinstallInstallsAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestRunPreinstallUpgradesOnVersionBump(t *testing.T) {
+	dshHome := t.TempDir()
+	t.Setenv("DSH_HOME", dshHome)
+	t.Setenv(stateDirEnv, t.TempDir())
+
+	if _, err := runPreinstall(noopLogf); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+
+	// Simulate an older recorded version and a corrupted install (missing package.json).
+	state := preinstallState{SchemaVersion: 1, Installed: []installedPlugin{
+		{Name: "dsh-file-changes", Version: "0.0.0"},
+		{Name: "@aaravarr/dsh-subagent-max", Version: "0.1.1"},
+		{Name: "dsh-plugin-open-editor", Version: "0.1.0"},
+		{Name: "dsh-plugin-diff-review", Version: "0.1.0"},
+	}}
+	if err := savePreinstallState(preinstallStatePath(), state); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(target, "package.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := runPreinstall(noopLogf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(status, "installed 1") {
+		t.Fatalf("upgrade status = %q, want installed 1", status)
+	}
+	if _, err := os.Stat(filepath.Join(target, "package.json")); err != nil {
+		t.Fatalf("package.json not restored after upgrade: %v", err)
+	}
+
+	s := loadPreinstallState(preinstallStatePath())
+	found := false
+	for _, ip := range s.Installed {
+		if ip.Name == "dsh-file-changes" && ip.Version == "0.1.0" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("state not updated to current version: %+v", s.Installed)
+	}
+}
+
+func TestUninstallPreinstalledPlugin(t *testing.T) {
+	dshHome := t.TempDir()
+	t.Setenv("DSH_HOME", dshHome)
+	t.Setenv(stateDirEnv, t.TempDir())
+
+	if _, err := runPreinstall(noopLogf); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := uninstallPreinstalledPlugin("file-changes", noopLogf); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+
+	// Directory removed.
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("plugin dir still present after uninstall")
+	}
+	// Patch block removed.
+	raw, _ := os.ReadFile(filepath.Join(dshHome, "profiles", "web", "cordis.patch.yml"))
+	if strings.Contains(string(raw), "id: file-changes") {
+		t.Fatalf("patch block still present: %s", raw)
+	}
+	// Other plugins remain registered.
+	if !strings.Contains(string(raw), "id: diff-review") {
+		t.Fatalf("other plugin lost after uninstall: %s", raw)
+	}
+	// State no longer records it.
+	s := loadPreinstallState(preinstallStatePath())
+	for _, ip := range s.Installed {
+		if ip.Name == "dsh-file-changes" {
+			t.Fatalf("state still records uninstalled plugin: %+v", s.Installed)
+		}
+	}
+
+	// Unknown id is an error, not a panic.
+	if err := uninstallPreinstalledPlugin("nope", noopLogf); err == nil {
+		t.Fatal("expected error for unknown plugin id")
+	}
+}
+
 func TestRunPreinstallLeavesUserInstallUntouched(t *testing.T) {
 	dshHome := t.TempDir()
 	t.Setenv("DSH_HOME", dshHome)

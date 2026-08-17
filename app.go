@@ -123,6 +123,16 @@ func (a *App) SetAllowPrivileged(enabled bool) {
 	a.emitRemote(a.remote.status())
 }
 
+// UninstallPreinstalledPlugin removes a shipped plugin by id, returning whether
+// it was uninstalled.
+func (a *App) UninstallPreinstalledPlugin(id string) bool {
+	if err := uninstallPreinstalledPlugin(id, a.dsh.logf); err != nil {
+		a.dsh.logf("uninstall %s failed: %v", id, err)
+		return false
+	}
+	return true
+}
+
 // emitRemote pushes a remote status snapshot to the frontend.
 func (a *App) emitRemote(s remoteStatus) {
 	if a.ctx != nil {
