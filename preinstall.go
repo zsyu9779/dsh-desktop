@@ -41,7 +41,7 @@ var preinstalledPlugins = []preinstallPlugin{
 		ID:      "file-changes",
 		Name:    "dsh-file-changes",
 		Dir:     "file-changes",
-		Version: "0.1.0",
+		Version: "0.2.0",
 		Insert: `- insert:
     - id: file-changes
       name: dsh-file-changes
@@ -51,7 +51,7 @@ var preinstalledPlugins = []preinstallPlugin{
 		ID:      "dsh-subagent-max",
 		Name:    "@aaravarr/dsh-subagent-max",
 		Dir:     "dsh-subagent-max",
-		Version: "0.1.1",
+		Version: "0.2.0",
 		Insert: `- insert:
     - id: dsh-subagent-max
       name: '@aaravarr/dsh-subagent-max'

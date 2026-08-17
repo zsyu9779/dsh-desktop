@@ -89,13 +89,17 @@ func TestRunPreinstallUpgradesOnVersionBump(t *testing.T) {
 	}
 	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
 
-	// Simulate an older recorded version and a corrupted install (missing package.json).
-	state := preinstallState{SchemaVersion: 1, Installed: []installedPlugin{
-		{Name: "dsh-file-changes", Version: "0.0.0"},
-		{Name: "@aaravarr/dsh-subagent-max", Version: "0.1.1"},
-		{Name: "dsh-plugin-open-editor", Version: "0.1.0"},
-		{Name: "dsh-plugin-diff-review", Version: "0.1.0"},
-	}}
+	// Simulate an older recorded version for file-changes and a corrupted install.
+	var wantVersion string
+	state := preinstallState{SchemaVersion: 1}
+	for _, p := range preinstalledPlugins {
+		v := p.Version
+		if p.Name == "dsh-file-changes" {
+			wantVersion = p.Version
+			v = "0.0.0"
+		}
+		state.Installed = append(state.Installed, installedPlugin{Name: p.Name, Version: v})
+	}
 	if err := savePreinstallState(preinstallStatePath(), state); err != nil {
 		t.Fatal(err)
 	}
@@ -115,15 +119,12 @@ func TestRunPreinstallUpgradesOnVersionBump(t *testing.T) {
 	}
 
 	s := loadPreinstallState(preinstallStatePath())
-	found := false
 	for _, ip := range s.Installed {
-		if ip.Name == "dsh-file-changes" && ip.Version == "0.1.0" {
-			found = true
+		if ip.Name == "dsh-file-changes" && ip.Version == wantVersion {
+			return
 		}
 	}
-	if !found {
-		t.Fatalf("state not updated to current version: %+v", s.Installed)
-	}
+	t.Fatalf("state not updated to current version %q: %+v", wantVersion, s.Installed)
 }
 
 func TestUninstallPreinstalledPlugin(t *testing.T) {

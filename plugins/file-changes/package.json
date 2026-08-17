@@ -1,7 +1,7 @@
 {
   "name": "dsh-file-changes",
-  "description": "Per-turn file-change panel: lists created/modified files at the end of every answer, shows their diffs, and reveals them in the OS file manager",
-  "version": "0.1.0",
+  "description": "Per-turn file-change panel with workspace-bound reveal (self-developed for dsh-desktop)",
+  "version": "0.2.0",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -46,10 +46,6 @@
     "diff",
     "plugin"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/mixin-ai/dsh-file-changes.git"
-  },
   "peerDependencies": {
     "react": "^18.2.0",
     "@deepseek-ai/cordis": "^4.0.1",
