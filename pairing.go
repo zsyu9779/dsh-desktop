@@ -302,7 +302,13 @@ func (c *hostCredential) issueLeafCert(ip net.IP) (certPEM, keyPEM []byte, finge
 	}
 	if c.LeafCertPEM != nil && c.LeafKeyPEM != nil && c.LeafIP == ipString {
 		if fp, ok := fingerprintOfLeaf(c.LeafCertPEM); ok {
-			return c.LeafCertPEM, c.LeafKeyPEM, fp, nil
+			// Only reuse a persisted leaf that is still within its validity
+			// window; an expired leaf is re-issued like a missing one.
+			if block, _ := pem.Decode(c.LeafCertPEM); block != nil {
+				if cert, err := x509.ParseCertificate(block.Bytes); err == nil && time.Now().Before(cert.NotAfter) {
+					return c.LeafCertPEM, c.LeafKeyPEM, fp, nil
+				}
+			}
 		}
 	}
 
