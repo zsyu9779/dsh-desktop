@@ -37,12 +37,21 @@ type deviceIdentity struct {
 }
 
 // hostCredential is the Host's persisted signing material: an Ed25519 keypair
-// used to sign device JWTs, plus a short-lived CA for the later LAN TLS ticket.
+// used to sign device JWTs, plus a CA and the stable LAN leaf certificate.
+//
+// The leaf certificate is persisted so the LAN TLS fingerprint stays stable
+// across restarts (ticket 04): the phone pins it on first use, and a rotating
+// fingerprint would silently break every previously paired device.
 type hostCredential struct {
 	Seed      []byte `json:"seed"`
 	PublicKey []byte `json:"publicKey"`
 	CACertPEM []byte `json:"caCertPem"`
 	CAKeyPEM  []byte `json:"caKeyPem"`
+	// LeafCertPEM/LeafKeyPEM are the stable leaf used by the LAN listener.
+	// LeafIP records which SAN IP the leaf covers; a changed LAN IP re-issues.
+	LeafCertPEM []byte `json:"leafCertPem,omitempty"`
+	LeafKeyPEM  []byte `json:"leafKeyPem,omitempty"`
+	LeafIP      string `json:"leafIp,omitempty"`
 }
 
 func (c *hostCredential) privateKey() ed25519.PrivateKey { return ed25519.NewKeyFromSeed(c.Seed) }
@@ -165,17 +174,24 @@ func loadOrCreateCredential(dir string) (*hostCredential, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, err
-	}
-	out, err := json.Marshal(c)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(path, out, 0o600); err != nil {
+	if err := c.save(dir); err != nil {
 		return nil, err
 	}
 	return c, nil
+}
+
+// save persists the credential (including the stable leaf, ticket 04) to
+// <dir>/credential.json.
+func (c *hostCredential) save(dir string) error {
+	path := filepath.Join(dir, "credential.json")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	out, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, out, 0o600)
 }
 
 // deviceRegistry tracks paired devices and persists them as JSON.
@@ -275,7 +291,21 @@ func deviceFingerprint(deviceID string) string {
 // issueLeafCert signs a short-lived server certificate with the Host CA for the
 // LAN listener, and returns its SHA-256 fingerprint (hex) for the phone to pin
 // on first use.
+//
+// Ticket 04: the leaf is persisted and reused when the SAN IP is unchanged, so
+// the fingerprint is stable across enable()/restart cycles. Only a changed
+// LAN IP (or a missing/expired persisted leaf) triggers a re-issue.
 func (c *hostCredential) issueLeafCert(ip net.IP) (certPEM, keyPEM []byte, fingerprint string, err error) {
+	ipString := ""
+	if ip != nil {
+		ipString = ip.String()
+	}
+	if c.LeafCertPEM != nil && c.LeafKeyPEM != nil && c.LeafIP == ipString {
+		if fp, ok := fingerprintOfLeaf(c.LeafCertPEM); ok {
+			return c.LeafCertPEM, c.LeafKeyPEM, fp, nil
+		}
+	}
+
 	caBlock, _ := pem.Decode(c.CACertPEM)
 	if caBlock == nil {
 		return nil, nil, "", fmt.Errorf("bad CA cert PEM")
@@ -324,5 +354,20 @@ func (c *hostCredential) issueLeafCert(ip net.IP) (certPEM, keyPEM []byte, finge
 	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 	sum := sha256.Sum256(der)
+	// Persist for the next enable()/restart so the fingerprint is stable.
+	c.LeafCertPEM = certPEM
+	c.LeafKeyPEM = keyPEM
+	c.LeafIP = ipString
 	return certPEM, keyPEM, hex.EncodeToString(sum[:]), nil
+}
+
+// fingerprintOfLeaf returns the SHA-256 fingerprint of the first certificate
+// in the PEM block, and whether a certificate was found.
+func fingerprintOfLeaf(certPEM []byte) (string, bool) {
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		return "", false
+	}
+	sum := sha256.Sum256(block.Bytes)
+	return hex.EncodeToString(sum[:]), true
 }

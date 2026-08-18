@@ -180,6 +180,10 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 	if err != nil {
 		return r.buildStatusLocked(), err
 	}
+	// Persist the stable leaf so the fingerprint survives restarts (ticket 04).
+	if err := cred.save(stateDir()); err != nil {
+		return r.buildStatusLocked(), fmt.Errorf("persist leaf cert: %w", err)
+	}
 	tlsCert, err := tls.X509KeyPair(leafCertPEM, leafKeyPEM)
 	if err != nil {
 		return r.buildStatusLocked(), err
