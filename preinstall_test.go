@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -34,6 +37,50 @@ func TestPatchHasPlugin(t *testing.T) {
 	// No false positive on an id that only shares a prefix.
 	if patchHasPlugin("- insert:\n    - id: diff-review-extra\n", "diff-review") {
 		t.Error("patchHasPlugin should not match diff-review-extra for id diff-review")
+	}
+}
+
+func TestPreinstalledClientBundlesRegisterPackageName(t *testing.T) {
+	for _, plugin := range preinstalledPlugins {
+		t.Run(plugin.Name, func(t *testing.T) {
+			packageJSON, err := fs.ReadFile(pluginsFS, filepath.ToSlash(filepath.Join("plugins", plugin.Dir, "package.json")))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var manifest struct {
+				Exports map[string]json.RawMessage `json:"exports"`
+				Version string                     `json:"version"`
+			}
+			if err := json.Unmarshal(packageJSON, &manifest); err != nil {
+				t.Fatal(err)
+			}
+			if manifest.Version != plugin.Version {
+				t.Fatalf("package version = %q, preinstall version = %q", manifest.Version, plugin.Version)
+			}
+
+			clientExport := manifest.Exports["./client"]
+			var clientPath string
+			if err := json.Unmarshal(clientExport, &clientPath); err != nil {
+				var conditions map[string]string
+				if err := json.Unmarshal(clientExport, &conditions); err != nil {
+					t.Fatalf("decode ./client export: %v", err)
+				}
+				clientPath = conditions["default"]
+			}
+			if clientPath == "" {
+				t.Fatal("package has no ./client export")
+			}
+
+			bundle, err := fs.ReadFile(pluginsFS, filepath.ToSlash(filepath.Join("plugins", plugin.Dir, strings.TrimPrefix(clientPath, "./"))))
+			if err != nil {
+				t.Fatal(err)
+			}
+			registration := regexp.MustCompile(`(?s)__ModuleLoader__\.load\s*\(\s*\{\s*id:\s*["']` + regexp.QuoteMeta(plugin.Name) + `["']`)
+			if !registration.Match(bundle) {
+				t.Fatalf("client bundle does not register package name %q via ModuleLoader.load", plugin.Name)
+			}
+		})
 	}
 }
 

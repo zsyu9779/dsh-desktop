@@ -51,7 +51,7 @@ var preinstalledPlugins = []preinstallPlugin{
 		ID:      "dsh-subagent-max",
 		Name:    "@aaravarr/dsh-subagent-max",
 		Dir:     "dsh-subagent-max",
-		Version: "0.2.0",
+		Version: "0.2.1",
 		Insert: `- insert:
     - id: dsh-subagent-max
       name: '@aaravarr/dsh-subagent-max'

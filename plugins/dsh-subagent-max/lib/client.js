@@ -8,7 +8,7 @@
  * without the drag-to-popout panel chrome.
  */
 window.__ModuleLoader__.load({
-  id: "dsh-subagent-max",
+  id: "@aaravarr/dsh-subagent-max",
   factory: (require) => {
     var module = { exports: {} };
     var exports = module.exports;

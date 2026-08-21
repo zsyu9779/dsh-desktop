@@ -1,6 +1,6 @@
 {
   "name": "@aaravarr/dsh-subagent-max",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Subagent delegation with per-call model/provider override (host) + a live Subagents tab (client) — self-developed for dsh-desktop",
   "type": "module",
   "main": "lib/index.js",
