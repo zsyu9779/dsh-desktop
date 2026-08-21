@@ -31,7 +31,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -44,6 +44,13 @@ jobs:
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+
+      - name: Test
+        run: go test ./...
+
+      - name: Smoke test DeepSeek Harness launcher
+        if: runner.os == 'Linux'
+        run: go test -timeout 4m -tags smoke -run TestDSHManagerReachesReady -v .
 
       - name: Build
         run: wails build -platform ${{ matrix.platform }} -clean

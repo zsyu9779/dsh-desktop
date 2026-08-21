@@ -79,7 +79,7 @@ func (a *App) EnableRemote() (remoteStatus, error) {
 	return s, nil
 }
 
-// DisableRemote stops the remote proxy and clears the pairing token.
+// DisableRemote stops the remote proxy and clears the pending pairing code.
 func (a *App) DisableRemote() {
 	a.remote.disable()
 	a.emitRemote(a.remote.status())
@@ -90,7 +90,8 @@ func (a *App) RemoteStatus() remoteStatus {
 	return a.remote.status()
 }
 
-// RegenerateRemoteToken rotates the pairing token, invalidating existing sessions.
+// RegenerateRemoteToken rotates only the pending one-time pairing code.
+// Existing paired Devices remain authorized until explicitly revoked.
 func (a *App) RegenerateRemoteToken() remoteStatus {
 	s := a.remote.regenerateToken()
 	a.emitRemote(s)

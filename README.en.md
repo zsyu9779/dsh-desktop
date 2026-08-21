@@ -52,11 +52,11 @@ Connect the computer and phone to the same trusted Wi-Fi, click **Enable** in th
   <img src="./assets/remote-control.png" alt="DeepSeek Harness Desktop LAN phone remote pairing by QR code" width="82%">
 </p>
 
-- Pairs through a QR code containing a random token, then stores access in an HttpOnly cookie
-- Regenerate the pairing code at any time to invalidate earlier phone sessions
-- Disabling phone remote stops the LAN proxy and clears the current pairing credential
+- Pairs a Device through a QR code containing a one-time code, then stores a Device credential in an HttpOnly cookie
+- Regenerating the pairing code only replaces an unused code; revoke an already paired Device from the Device list
+- Disabling phone remote stops the LAN proxy and clears the pending pairing code while retaining paired Device records
 
-> The current release uses direct HTTP on a **trusted LAN**; it is not public-internet remote access. Do not enable it on untrusted Wi-Fi such as cafés or guest networks.
+> The current release uses self-signed HTTPS on a **trusted LAN** and displays the certificate fingerprint for verification. It is not public-internet remote access; do not expose it directly to the internet.
 
 ## Download / Install
 

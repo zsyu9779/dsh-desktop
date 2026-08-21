@@ -1,10 +1,10 @@
-# 手机远程访问（M1 · 局域网）
+# 手机远程访问（M1.5 · 局域网）
 
-> 状态：M1 已跑通（同 WiFi 局域网）。公网档（M3）见 `product-spec.md`。
+> 状态：M1.5 已跑通（同 WiFi 局域网，HTTPS、设备 Pairing 与可撤销授权）。公网档（M3）见 `product-spec.md`。
 
 ## 是什么
 
-把桌面端 `dsh web`（跑在 `127.0.0.1` 上）通过一个**带 token 鉴权的反向代理**暴露到局域网，让手机浏览器扫码即可操控这台电脑上的 DeepSeek Harness。
+把 Host 上的 `dsh web`（跑在 `127.0.0.1` 上）通过一个**带设备鉴权的 HTTPS 反向代理**暴露到局域网，让 Device 浏览器扫码完成 Pairing 后操控 Host 上的 DeepSeek Harness。
 
 - 手机端**无需装 app**：dsh 前端本身是 PWA，扫二维码 → 浏览器打开 → 「添加到主屏幕」即可。
 - 任务、文件、凭据、会话都**留在电脑上**，手机只是远程操控界面。
@@ -20,11 +20,11 @@
 ## 架构
 
 ```
-手机浏览器(PWA)
-   │  http://<LAN-IP>:8787/?t=<token>
+Device 浏览器(PWA)
+   │  https://<LAN-IP>:8787/?pair=<一次性配对码>
    ▼
 桌面壳内反向代理（remote.go，Go）
-   │  校验 token → 改写 Host/Origin/Referer 为 loopback → 注入 polyfill → 转发
+   │  消费配对码/校验设备 JWT → 改写 Host/Origin/Referer 为 loopback → 注入 polyfill → 转发
    ▼
 dsh web  @ 127.0.0.1:<随机端口>   ← 安全边界不变
 ```
@@ -33,19 +33,21 @@ dsh web  @ 127.0.0.1:<随机端口>   ← 安全边界不变
 
 1. **改写 Host 头为 loopback**：`NewSingleHostReverseProxy` 只改 `req.URL.Host`、不改 `req.Host`，必须显式 `req.Host = targetURL.Host`。否则 dsh 的 `/api` trust 栅栏会把手机当外人，全 403。
 2. **改写 Origin/Referer 为 loopback**：dsh 要求 `Origin` 与 `Host` 一致，否则 403。
-3. **注入 crypto.randomUUID polyfill**：该 API 只在安全上下文（HTTPS/localhost）存在，手机走明文 LAN IP 没有它，dsh 前端发起 API 请求会直接抛错。
+3. **注入 crypto.randomUUID polyfill**：为不完整支持该 API 的 WebView/浏览器提供兼容实现，避免 dsh 前端发起 API 请求时抛错。
 
 ### 其他改动
 
 - **强制 browse 目录选择器**：给 dsh 进程注入 `SSH_CONNECTION=dsh-desktop`，让目录选择走「browse」（API 列目录，远程可用）而非「native」（弹 macOS 原生选择框，被钉死在 loopback）。
-- **二维码**：编码 `http://<LAN-IP>:8787/?t=<token>`，扫码即完成「配对」（token 写进 HttpOnly cookie）。
+- **二维码**：编码 `https://<LAN-IP>:8787/?pair=<一次性配对码>`；配对码 60 秒有效且只能消费一次，成功后签发 HttpOnly 设备 JWT。
+- **设备管理**：已配对 Device 会写入 Host 的设备注册表；轮换配对码不会撤销它们，需在设备列表中逐个撤销。
+- **HTTPS**：Host 为当前局域网地址签发自签名证书，并在界面展示证书指纹供 Owner 核对。
 - **优先物理网卡**：二维码取局域网 IP 时优先 `en*/eth*`，避免抓到 VPN（utun）/虚拟机（vmnet）网卡。
 
 ## 安全边界（重要）
 
-- **token = 完全控制权**。请求被完整重写成 loopback，手机能调用包括 `settings.*`、`credentials.*` 在内的所有方法——和坐在电脑前等价。
-- M1 是**局域网明文 HTTP**，token 随 URL 走。仅适合可信局域网；不要直接暴露到公网。
-- 可随时点「重新生成配对码」让旧 token 失效。
+- **设备凭据代表远程控制权**。默认敏感方法受 Host 侧授权开关限制；Owner 开启敏感权限后，已配对 Device 才能调用 `settings.*`、`credentials.*` 等方法。
+- M1.5 使用**局域网自签名 HTTPS**与设备级凭据。仅适合可信局域网；不要直接暴露到公网。
+- 「重新生成配对码」只让尚未消费的旧配对码失效；撤销既有 Device 必须使用设备列表中的撤销操作。
 - 公网档（M3）会在此之上叠 E2E + 账号，见 `product-spec.md`。
 
 ## 已知限制（M1）
@@ -57,7 +59,7 @@ dsh web  @ 127.0.0.1:<随机端口>   ← 安全边界不变
 
 ## 相关代码
 
-- `remote.go` — 反向代理 + token + 二维码 + Host/Origin 改写 + polyfill 注入。
+- `remote.go` — HTTPS 反向代理 + 一次性配对码 + 设备 JWT + 二维码 + Host/Origin 改写 + polyfill 注入。
 - `remote_polyfill.js` — crypto.randomUUID polyfill（`//go:embed` 嵌入）。
 - `app.go` — EnableRemote/DisableRemote/RemoteStatus/RegenerateRemoteToken 绑定方法。
 - `dsh.go` — `augmentedEnv()` 注入 `SSH_CONNECTION=dsh-desktop`。

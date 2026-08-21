@@ -53,6 +53,12 @@ type status struct {
 	Message string `json:"message"` // human-readable status line
 }
 
+type nodeInstallation struct {
+	nodePath string
+	npmPath  string
+	version  string
+}
+
 // dshManager owns the lifecycle of the DeepSeek Harness child process.
 type dshManager struct {
 	app *App
@@ -196,7 +202,8 @@ func awaitProcessExit(cmd *exec.Cmd, done <-chan struct{}) {
 func (m *dshManager) run(ctx context.Context) {
 	// 1) Environment check: Node.js / npm must be present.
 	m.setStatus("starting", "正在检查环境…")
-	if err := m.checkEnvironment(); err != nil {
+	nodeInstall, err := m.checkEnvironment()
+	if err != nil {
 		if ctx.Err() != nil {
 			return
 		}
@@ -213,7 +220,7 @@ func (m *dshManager) run(ctx context.Context) {
 		return
 	}
 
-	cmd, err := m.buildCommand(ctx, port)
+	cmd, err := m.buildCommand(ctx, port, nodeInstall)
 	if err != nil {
 		m.fail(fmt.Errorf("无法创建进程: %w", err))
 		return
@@ -379,18 +386,19 @@ func (m *dshManager) pump(r io.Reader) {
 }
 
 // buildCommand constructs the dsh launcher command.
-func (m *dshManager) buildCommand(ctx context.Context, port int) (*exec.Cmd, error) {
+func (m *dshManager) buildCommand(ctx context.Context, port int, nodeInstall nodeInstallation) (*exec.Cmd, error) {
 	portStr := fmt.Sprintf("%d", port)
 	webArgs := []string{"web", "--no-open", "--host", "127.0.0.1", "--port", portStr, "--trusted-host", "127.0.0.1"}
 
 	var bin string
 	var args []string
-	if custom := strings.TrimSpace(os.Getenv("DSH_COMMAND")); custom != "" {
-		parts := strings.Fields(custom)
+	customCommand := strings.TrimSpace(os.Getenv("DSH_COMMAND"))
+	if customCommand != "" {
+		parts := strings.Fields(customCommand)
 		bin = parts[0]
 		args = append(parts[1:], webArgs...)
 	} else {
-		bin = "npm"
+		bin = nodeInstall.npmPath
 		// Bootstrap the package manager version used by upstream, then let pnpm
 		// resolve DSH's large peer graph. npm's resolver can backtrack for many
 		// minutes on that graph before the CLI starts.
@@ -403,9 +411,13 @@ func (m *dshManager) buildCommand(ctx context.Context, port int) (*exec.Cmd, err
 	// Resolve the launcher's absolute path explicitly: macOS GUI apps are
 	// launched by launchd with a minimal PATH that omits Homebrew/nvm/fnm/volta,
 	// so `npm` would otherwise not be found even when Node.js is installed.
-	binPath, err := findExecutable(bin)
-	if err != nil {
-		return nil, fmt.Errorf("未找到 %q，请先安装 Node.js（需要 npm）: %w", bin, err)
+	binPath := bin
+	if customCommand != "" {
+		var err error
+		binPath, err = findExecutable(bin)
+		if err != nil {
+			return nil, fmt.Errorf("未找到 %q: %w", bin, err)
+		}
 	}
 
 	cmd := exec.CommandContext(ctx, binPath, args...)
@@ -417,9 +429,8 @@ func (m *dshManager) buildCommand(ctx context.Context, port int) (*exec.Cmd, err
 
 	// Extend PATH so npm's `#!/usr/bin/env node` shebang and any subprocesses
 	// (pnpm, node) resolve from the same Node.js installation.
-	nodePath, _ := findExecutable("node")
-	cmd.Env = augmentedEnv(filepath.Dir(nodePath))
-	if bin == "npm" {
+	cmd.Env = augmentedEnv(filepath.Dir(nodeInstall.nodePath))
+	if customCommand == "" {
 		cmd.Env = withEnv(cmd.Env, "NPM_CONFIG_CACHE", managedNPMCacheDir())
 		cmd.Env = withEnv(cmd.Env, "NPM_CONFIG_YES", "true")
 	}
@@ -574,27 +585,64 @@ func workspaceDir() string {
 
 // checkEnvironment verifies a DSH-compatible Node.js / npm installation and
 // logs the resolved paths and version.
-func (m *dshManager) checkEnvironment() error {
-	nodePath, err := findExecutable("node")
+func (m *dshManager) checkEnvironment() (nodeInstallation, error) {
+	install, err := findCompatibleNodeInstallation(nodeCandidateDirs())
 	if err != nil {
-		return fmt.Errorf("未检测到 Node.js。请先安装 Node.js %s 及更高的 22.x 版本，或 24 及更高版本（https://nodejs.org）后重新打开本应用。", minimumNodeVersion)
+		return nodeInstallation{}, fmt.Errorf("未检测到兼容的 Node.js 与 npm。请安装 Node.js %s 及更高的 22.x 版本，或 24 及更高版本（https://nodejs.org）后重新打开本应用: %w", minimumNodeVersion, err)
 	}
-	nodeVersionOutput, err := exec.Command(nodePath, "--version").Output()
-	if err != nil {
-		return fmt.Errorf("无法检查 Node.js 版本: %w", err)
-	}
-	nodeVersion := strings.TrimSpace(string(nodeVersionOutput))
-	if !isSupportedNodeVersion(nodeVersion) {
-		return fmt.Errorf("当前 Node.js 版本为 %s；DeepSeek Harness 需要 Node.js %s 及更高的 22.x 版本，或 24 及更高版本。", nodeVersion, minimumNodeVersion)
-	}
-	m.logf("node: %s (%s)", nodePath, nodeVersion)
+	m.logf("node: %s (%s)", install.nodePath, install.version)
+	m.logf("npm: %s", install.npmPath)
+	return install, nil
+}
 
-	npmPath, err := findExecutable("npm")
-	if err != nil {
-		return fmt.Errorf("未检测到 npm。请重新安装 Node.js %s 及更高的 22.x 版本，或 24 及更高版本（https://nodejs.org）后重新打开本应用。", minimumNodeVersion)
+func nodeCandidateDirs() []string {
+	dirs := make([]string, 0, len(nodeBinPaths())+1)
+	if nodePath, err := exec.LookPath("node"); err == nil {
+		dirs = append(dirs, filepath.Dir(nodePath))
 	}
-	m.logf("npm: %s", npmPath)
-	return nil
+	return append(dirs, nodeBinPaths()...)
+}
+
+// findCompatibleNodeInstallation selects the first supported Node.js runtime
+// that has npm beside it. This keeps npm and all child shebangs pinned to the
+// same installation even when PATH contains an older Node first.
+func findCompatibleNodeInstallation(dirs []string) (nodeInstallation, error) {
+	seen := make(map[string]struct{}, len(dirs))
+	var foundVersions []string
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		cleanDir := filepath.Clean(dir)
+		if _, ok := seen[cleanDir]; ok {
+			continue
+		}
+		seen[cleanDir] = struct{}{}
+
+		nodePath, err := exec.LookPath(filepath.Join(cleanDir, "node"))
+		if err != nil {
+			continue
+		}
+		versionOutput, err := exec.Command(nodePath, "--version").Output()
+		if err != nil {
+			continue
+		}
+		version := strings.TrimSpace(string(versionOutput))
+		foundVersions = append(foundVersions, version)
+		if !isSupportedNodeVersion(version) {
+			continue
+		}
+
+		npmPath, err := exec.LookPath(filepath.Join(cleanDir, "npm"))
+		if err != nil {
+			continue
+		}
+		return nodeInstallation{nodePath: nodePath, npmPath: npmPath, version: version}, nil
+	}
+	if len(foundVersions) > 0 {
+		return nodeInstallation{}, fmt.Errorf("找到的 Node.js 版本均不受支持或缺少同目录 npm: %s", strings.Join(foundVersions, ", "))
+	}
+	return nodeInstallation{}, fmt.Errorf("未找到 Node.js 可执行文件")
 }
 
 func isSupportedNodeVersion(version string) bool {
