@@ -55,7 +55,7 @@ wails build   # 打包 build/bin/dsh-desktop.app
 
 - dsh 优先绑 `3080`，被占用则随机端口。
 - 远程代理端口固定 `8787`（被占用则随机），现已走 HTTPS。
-- `wails dev` 热重载 Go 会**硬杀**应用（不走 shutdown 清理），留孤儿 dsh 进程（`npx → npm exec → node dsh`），需手动 kill。
+- `wails dev` 热重载 Go 会**硬杀**应用（不走 shutdown 清理），留孤儿 dsh 进程（`npm → pnpm → node → dsh`），需手动 kill。
 - 改前端后记得重新打 dist：`cd frontend && npm run build`。
 - 在受限沙箱里跑 Go 时若报 `operation not permitted`（写不进 `~/Library/Caches/go-build`），用 `GOCACHE=$PWD/.gocache go test ./...` 重定向到工作区。
 
@@ -106,7 +106,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 ## 7. 环境事实
 
 - 机器：macOS（arm64），Xcode 26.3，Go 1.26.0，Node v25.8.2。
-- dsh 版本：`@deepseek-ai/dsh@0.1.0-rc.6`（`dsh.go` 的 `dshPackage` 常量固定）。
+- dsh 版本：`@deepseek-ai/dsh@0.1.0-rc.8`（`dsh.go` 的 `dshPackage` 常量固定）。
 - 端口占用：`3080` = 当前 agent session 的 harness（勿杀）；`8787` = 远程代理（HTTPS）；`5173` = vite。
 - 日志：`~/.dsh-desktop/logs/dsh.log`。
 - 桌面壳工作目录：默认用户主目录，可用 `DSH_WORKSPACE` 覆盖，`DSH_HOME` 控制 profiles/存储位置。

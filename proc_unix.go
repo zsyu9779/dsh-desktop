@@ -8,7 +8,7 @@ import (
 )
 
 // configureSysProcAttr puts the child into its own process group on Unix so the
-// whole tree (npx -> node -> dsh) can be signalled together.
+// whole tree (npm -> pnpm -> node -> dsh) can be signalled together.
 func configureSysProcAttr(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
