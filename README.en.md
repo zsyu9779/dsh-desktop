@@ -63,7 +63,7 @@ Connect the computer and phone to the same trusted Wi-Fi, click **Enable** in th
 Get the installer for your platform from [Releases](https://github.com/zsyu9779/dsh-desktop/releases):
 
 - **macOS**: `dsh-desktop-darwin-universal.dmg` (universal, Intel + Apple Silicon)
-- **Windows**: `dsh-desktop-windows-amd64-installer.exe` (installer wizard), or the portable `.exe` in the same directory
+- **Windows**: `dsh-desktop.exe` (portable, amd64)
 - **Linux**: `dsh-desktop-linux-amd64.tar.gz`
 
 > macOS Gatekeeper will block an unsigned app on first launch: right-click the app and choose "Open" to allow it, or run
