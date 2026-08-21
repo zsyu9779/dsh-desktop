@@ -21,7 +21,12 @@ import (
 const (
 	// dshPackage is the pinned upstream DeepSeek Harness release. Bump this to
 	// track a newer release, or set DSH_COMMAND to override the launcher entirely.
-	dshPackage = "@deepseek-ai/dsh@0.1.0-rc.6"
+	dshPackage = "@deepseek-ai/dsh@0.1.0-rc.8"
+
+	// DSH supports Node.js 22 from 22.19 onward, skips the unsupported Node.js 23
+	// line, and supports Node.js 24 and newer.
+	minimumNodeVersion = "22.19.0"
+	pnpmPackage        = "pnpm@11.7.0"
 
 	// preferredPort keeps the origin stable across launches so the web UI's
 	// localStorage (settings, etc.) persists. We fall back to a random free port
@@ -29,7 +34,7 @@ const (
 	preferredPort = 3080
 
 	// readyTimeout bounds how long we wait for the web UI to come up (the first
-	// run also pays the npx download + first-build cost).
+	// run also pays the npm download + first-build cost).
 	readyTimeout = 180 * time.Second
 
 	// killGrace is how long we wait for the process tree to exit after SIGTERM
@@ -147,9 +152,9 @@ func (m *dshManager) stop() {
 	m.mu.Unlock()
 
 	if cmd != nil && cmd.Process != nil {
-		// Terminate the whole process tree (npx -> node -> dsh), not just npx.
+		// Terminate the whole process tree (npm -> pnpm -> node -> dsh), not just npm.
 		// Signal the group before cancelling CommandContext, whose default kill
-		// targets only the immediate npx process.
+		// targets only the immediate npm process.
 		terminateProcessTree(cmd, false)
 	}
 	if cancel != nil {
@@ -158,12 +163,7 @@ func (m *dshManager) stop() {
 
 	if cmd != nil && cmd.Process != nil {
 		if done != nil {
-			select {
-			case <-done:
-			case <-time.After(killGrace):
-				terminateProcessTree(cmd, true)
-				<-done
-			}
+			awaitProcessExit(cmd, done)
 		}
 	}
 
@@ -177,10 +177,24 @@ func (m *dshManager) stop() {
 	}
 }
 
+// awaitProcessExit bounds both graceful and forced shutdown waits. Callers
+// signal the process group gracefully before entering this helper.
+func awaitProcessExit(cmd *exec.Cmd, done <-chan struct{}) {
+	select {
+	case <-done:
+	case <-time.After(killGrace):
+		terminateProcessTree(cmd, true)
+		select {
+		case <-done:
+		case <-time.After(killGrace):
+		}
+	}
+}
+
 // run performs the actual launch: check env, pick a port, spawn dsh, and wait
 // for readiness. Its context is cancelled when the window or app closes.
 func (m *dshManager) run(ctx context.Context) {
-	// 1) Environment check: Node.js / npx must be present.
+	// 1) Environment check: Node.js / npm must be present.
 	m.setStatus("starting", "正在检查环境…")
 	if err := m.checkEnvironment(); err != nil {
 		if ctx.Err() != nil {
@@ -190,7 +204,7 @@ func (m *dshManager) run(ctx context.Context) {
 		return
 	}
 
-	// 2) Launch + readiness. npx downloads the pinned package on first run.
+	// 2) Launch + readiness. npm downloads the pinned package on first run.
 	m.setStatus("starting", "正在启动 DeepSeek Harness…（首次运行需下载依赖，请稍候）")
 
 	port, err := findPort()
@@ -253,6 +267,11 @@ func (m *dshManager) run(ctx context.Context) {
 	select {
 	case ready := <-readyCh:
 		if !ready {
+			// A readiness timeout does not stop the child by itself. Shut down the
+			// entire process group before fail clears the published handle, or a
+			// slow/stuck npm install would survive in the background.
+			terminateProcessTree(cmd, false)
+			awaitProcessExit(cmd, done)
 			m.fail(fmt.Errorf("等待 DeepSeek Harness 就绪超时 (%v)", readyTimeout))
 			return
 		}
@@ -362,7 +381,7 @@ func (m *dshManager) pump(r io.Reader) {
 // buildCommand constructs the dsh launcher command.
 func (m *dshManager) buildCommand(ctx context.Context, port int) (*exec.Cmd, error) {
 	portStr := fmt.Sprintf("%d", port)
-	webArgs := []string{"web", "--host", "127.0.0.1", "--port", portStr, "--trusted-host", "127.0.0.1"}
+	webArgs := []string{"web", "--no-open", "--host", "127.0.0.1", "--port", portStr, "--trusted-host", "127.0.0.1"}
 
 	var bin string
 	var args []string
@@ -371,16 +390,22 @@ func (m *dshManager) buildCommand(ctx context.Context, port int) (*exec.Cmd, err
 		bin = parts[0]
 		args = append(parts[1:], webArgs...)
 	} else {
-		bin = "npx"
-		args = append([]string{"-y", dshPackage}, webArgs...)
+		bin = "npm"
+		// Bootstrap the package manager version used by upstream, then let pnpm
+		// resolve DSH's large peer graph. npm's resolver can backtrack for many
+		// minutes on that graph before the CLI starts.
+		args = append([]string{
+			"exec", "--package=" + pnpmPackage, "--", "pnpm",
+			"--config.store-dir=" + managedPNPMStoreDir(), "dlx", dshPackage,
+		}, webArgs...)
 	}
 
 	// Resolve the launcher's absolute path explicitly: macOS GUI apps are
 	// launched by launchd with a minimal PATH that omits Homebrew/nvm/fnm/volta,
-	// so `npx` would otherwise not be found even when Node.js is installed.
+	// so `npm` would otherwise not be found even when Node.js is installed.
 	binPath, err := findExecutable(bin)
 	if err != nil {
-		return nil, fmt.Errorf("未找到 %q，请先安装 Node.js（需要 npx）: %w", bin, err)
+		return nil, fmt.Errorf("未找到 %q，请先安装 Node.js（需要 npm）: %w", bin, err)
 	}
 
 	cmd := exec.CommandContext(ctx, binPath, args...)
@@ -390,11 +415,13 @@ func (m *dshManager) buildCommand(ctx context.Context, port int) (*exec.Cmd, err
 		cmd.Dir = wd
 	}
 
-	// Extend PATH so npx's `#!/usr/bin/env node` shebang and any subprocesses
+	// Extend PATH so npm's `#!/usr/bin/env node` shebang and any subprocesses
 	// (pnpm, node) resolve from the same Node.js installation.
-	cmd.Env = augmentedEnv()
-	if bin == "npx" {
+	nodePath, _ := findExecutable("node")
+	cmd.Env = augmentedEnv(filepath.Dir(nodePath))
+	if bin == "npm" {
 		cmd.Env = withEnv(cmd.Env, "NPM_CONFIG_CACHE", managedNPMCacheDir())
+		cmd.Env = withEnv(cmd.Env, "NPM_CONFIG_YES", "true")
 	}
 	return cmd, nil
 }
@@ -465,9 +492,14 @@ func nodeBinPaths() []string {
 }
 
 // augmentedEnv returns the process environment with PATH extended to include
-// nodeBinPaths, so the child's `#!/usr/bin/env node` shebangs resolve.
-func augmentedEnv() []string {
-	aug := strings.Join(nodeBinPaths(), string(os.PathListSeparator))
+// nodeBinPaths. preferredNodeDir comes first so child shebangs use the same
+// Node.js installation that checkEnvironment validated.
+func augmentedEnv(preferredNodeDir string) []string {
+	dirs := nodeBinPaths()
+	if preferredNodeDir != "" && preferredNodeDir != "." {
+		dirs = append([]string{preferredNodeDir}, dirs...)
+	}
+	aug := strings.Join(dirs, string(os.PathListSeparator))
 	env := os.Environ()
 	out := make([]string, 0, len(env)+2)
 	set := false
@@ -511,14 +543,22 @@ func withEnv(env []string, key, value string) []string {
 	return out
 }
 
-// managedNPMCacheDir isolates dsh-desktop from concurrent npm/npx clients and
-// stale shared _npx state, which can otherwise produce
+// managedNPMCacheDir isolates dsh-desktop from concurrent npm clients and
+// stale shared execution state, which can otherwise produce
 // "sh: dsh: command not found" even though the package is installed.
 func managedNPMCacheDir() string {
+	return managedRuntimePath("npm-cache-v1", "dsh-desktop-npm-cache-v1")
+}
+
+func managedPNPMStoreDir() string {
+	return managedRuntimePath("pnpm-store-v1", "dsh-desktop-pnpm-store-v1")
+}
+
+func managedRuntimePath(homeName, tempName string) string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		return filepath.Join(home, ".dsh-desktop", "npm-cache-v1")
+		return filepath.Join(home, ".dsh-desktop", homeName)
 	}
-	return filepath.Join(os.TempDir(), "dsh-desktop-npm-cache-v1")
+	return filepath.Join(os.TempDir(), tempName)
 }
 
 // workspaceDir returns the directory dsh should run in (DSH_WORKSPACE or home).
@@ -532,19 +572,37 @@ func workspaceDir() string {
 	return ""
 }
 
-// checkEnvironment verifies Node.js / npx are available and logs their paths.
+// checkEnvironment verifies a DSH-compatible Node.js / npm installation and
+// logs the resolved paths and version.
 func (m *dshManager) checkEnvironment() error {
-	npxPath, err := findExecutable("npx")
+	nodePath, err := findExecutable("node")
 	if err != nil {
-		return fmt.Errorf("未检测到 Node.js / npx。请先安装 Node.js（https://nodejs.org）后重新打开本应用。")
+		return fmt.Errorf("未检测到 Node.js。请先安装 Node.js %s 及更高的 22.x 版本，或 24 及更高版本（https://nodejs.org）后重新打开本应用。", minimumNodeVersion)
 	}
-	m.logf("npx: %s", npxPath)
-	if nodePath, err := findExecutable("node"); err == nil {
-		if out, err := exec.Command(nodePath, "--version").Output(); err == nil {
-			m.logf("node: %s (%s)", nodePath, strings.TrimSpace(string(out)))
-		}
+	nodeVersionOutput, err := exec.Command(nodePath, "--version").Output()
+	if err != nil {
+		return fmt.Errorf("无法检查 Node.js 版本: %w", err)
 	}
+	nodeVersion := strings.TrimSpace(string(nodeVersionOutput))
+	if !isSupportedNodeVersion(nodeVersion) {
+		return fmt.Errorf("当前 Node.js 版本为 %s；DeepSeek Harness 需要 Node.js %s 及更高的 22.x 版本，或 24 及更高版本。", nodeVersion, minimumNodeVersion)
+	}
+	m.logf("node: %s (%s)", nodePath, nodeVersion)
+
+	npmPath, err := findExecutable("npm")
+	if err != nil {
+		return fmt.Errorf("未检测到 npm。请重新安装 Node.js %s 及更高的 22.x 版本，或 24 及更高版本（https://nodejs.org）后重新打开本应用。", minimumNodeVersion)
+	}
+	m.logf("npm: %s", npmPath)
 	return nil
+}
+
+func isSupportedNodeVersion(version string) bool {
+	var major, minor, patch int
+	if _, err := fmt.Sscanf(version, "v%d.%d.%d", &major, &minor, &patch); err != nil {
+		return false
+	}
+	return major >= 24 || (major == 22 && minor >= 19)
 }
 
 // findPort returns the preferred port if free, otherwise a random free port.

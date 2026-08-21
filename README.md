@@ -32,8 +32,8 @@ DeepSeek Harness Desktop 是 DeepSeek Harness 的桌面启动器和原生容器�
 
 - **跨平台桌面应用**：支持 macOS、Windows 和 Linux。
 - **原生应用体验**：提供独立窗口、Dock/任务栏图标和应用菜单。
-- **自动启动 DSH**：通过 `npx` 拉取并运行固定版本的 `@deepseek-ai/dsh`。
-- **可靠的进程管理**：关闭窗口或退出应用时清理 `npx → node → dsh` 进程树。
+- **自动启动 DSH**：通过 `npm exec` 获取上游使用的 pnpm，再拉取并运行固定版本的 `@deepseek-ai/dsh`。
+- **可靠的进程管理**：关闭窗口或退出应用时清理 `npm → pnpm → node → dsh` 进程树。
 - **稳定的窗口恢复**：保留 Wails 原生容器，修复 macOS 最小化后恢复白屏的问题。
 - **局域网手机远程**：同一 Wi-Fi 下扫码即可在手机浏览器操控当前 DeepSeek Harness。
 - **启动状态与错误提示**：显示环境检查、首次下载、服务启动和失败状态。
@@ -58,7 +58,7 @@ DeepSeek Harness 的对话、模型、插件、会话和设置能力均由上游
 
 ## 下载与安装
 
-运行 DeepSeek Harness Desktop 前，请先安装 [Node.js 18 或更高版本](https://nodejs.org/)。应用依赖 Node.js 附带的 `npx` 下载和启动 DSH。
+运行 DeepSeek Harness Desktop 前，请先安装 [Node.js 22.19+（22.x）或 24+](https://nodejs.org/)。应用依赖 Node.js 附带的 `npm` 下载和启动 DSH。
 
 前往 [GitHub Releases](https://github.com/zsyu9779/dsh-desktop/releases/latest) 下载对应平台的安装包：
 
@@ -90,8 +90,8 @@ xattr -d com.apple.quarantine "/Applications/dsh-desktop.app"
 
 应用启动后会完成以下流程：
 
-1. 检查本机能否找到 Node.js 和 `npx`。
-2. 在独立 npm 缓存中运行固定版本的 `@deepseek-ai/dsh`。
+1. 检查本机能否找到 Node.js 和 `npm`。
+2. 通过 `npm exec` 获取固定版本的 pnpm，在独立缓存中运行固定版本的 `@deepseek-ai/dsh`。
 3. 优先使用本地端口 `3080`；端口被占用时自动选择可用端口。
 4. 轮询 DSH Web 服务，等待其返回成功响应。
 5. 在保留 Wails 顶层容器的前提下，通过全屏页面载入 DSH UI。
@@ -99,12 +99,12 @@ xattr -d com.apple.quarantine "/Applications/dsh-desktop.app"
 
 ```text
 DeepSeek Harness Desktop (Wails / Go)
-└── npx @deepseek-ai/dsh web
+└── npm exec --package=pnpm@11.7.0 -- pnpm dlx @deepseek-ai/dsh web --no-open
     └── node / dsh
         └── Local Web UI on 127.0.0.1
 ```
 
-应用默认固定上游版本 `@deepseek-ai/dsh@0.1.0-rc.6`，避免每次启动因上游最新版变化而产生不可预测的行为。
+应用默认固定上游版本 `@deepseek-ai/dsh@0.1.0-rc.8`，避免每次启动因上游最新版变化而产生不可预测的行为。
 
 ## 配置
 
@@ -120,14 +120,14 @@ DeepSeek Harness Desktop (Wails / Go)
 ~/.dsh-desktop/logs/dsh.log
 ```
 
-应用使用独立 npm 缓存，减少共享 `_npx` 缓存损坏或并发访问造成的 `sh: dsh: command not found` 问题。
+应用使用独立 npm 缓存和 pnpm store，减少共享执行缓存损坏或并发访问造成的 `sh: dsh: command not found` 问题。
 
 ## 从源码构建
 
 开发环境需要：
 
 - Go 1.23+
-- Node.js 18+
+- Node.js 22.19+（22.x）或 24+
 - Wails v2.11+
 
 安装 Wails CLI 并构建：
@@ -161,11 +161,11 @@ wails dev
 
 ### 为什么必须安装 Node.js？
 
-DeepSeek Harness 通过 npm 发布。桌面应用使用 Node.js 和 `npx` 下载并运行固定版本的 `@deepseek-ai/dsh`，因此当前版本不是完全独立的离线安装包。
+DeepSeek Harness 通过 npm 发布。桌面应用使用 Node.js、`npm exec` 和固定版本的 pnpm 下载并运行固定版本的 `@deepseek-ai/dsh`，因此当前版本不是完全独立的离线安装包。
 
 ### 关闭应用后 DSH 还会在后台运行吗？
 
-正常关闭窗口或退出应用时，桌面壳会终止完整的 `npx → node → dsh` 进程树。若应用被操作系统强制终止，仍建议通过任务管理器确认是否存在异常残留进程。
+正常关闭窗口或退出应用时，桌面壳会终止完整的 `npm → pnpm → node → dsh` 进程树。若应用被操作系统强制终止，仍建议通过任务管理器确认是否存在异常残留进程。
 
 ### 数据和设置保存在哪里？
 
@@ -177,7 +177,7 @@ DeepSeek Harness 通过 npm 发布。桌面应用使用 Node.js 和 `npx` 下载
 
 ### 出现白屏或启动失败怎么办？
 
-先确认 `node --version` 和 `npx --version` 可用，再查看启动页日志或 `~/.dsh-desktop/logs/dsh.log`。提交 Issue 时请附上操作系统、应用版本和相关日志。
+先确认 `node --version` 和 `npm --version` 可用，再查看启动页日志或 `~/.dsh-desktop/logs/dsh.log`。提交 Issue 时请附上操作系统、应用版本和相关日志。
 
 ## 发布流程
 

@@ -8,8 +8,8 @@ import (
 )
 
 // TestDSHManagerReachesReady is an end-to-end smoke test of the launcher logic
-// without the GUI: it spawns the real `npx dsh web` process and waits for the
-// local web UI to come up. Skip with -short or DSH_SMOKE_SKIP=1.
+// without the GUI: it spawns the real `npm -> pnpm -> dsh web` process and waits
+// for the local web UI to come up. Skip with -short.
 func TestDSHManagerReachesReady(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration smoke test in short mode")
@@ -18,7 +18,7 @@ func TestDSHManagerReachesReady(t *testing.T) {
 	m := newDSHManager(&App{}) // nil ctx: no events/dialogs, pure process lifecycle
 	m.start()
 
-	deadline := time.Now().Add(200 * time.Second)
+	deadline := time.Now().Add(readyTimeout + 20*time.Second)
 	for time.Now().Before(deadline) {
 		s := m.current()
 		switch s.State {
