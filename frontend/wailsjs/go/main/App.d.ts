@@ -33,3 +33,5 @@ export function SetAllowPrivileged(arg1:boolean):Promise<void>;
 export function SetDSHVersion(arg1:string):Promise<void>;
 
 export function Status():Promise<main.status>;
+
+export function UninstallPreinstalledPlugin(arg1:string):Promise<boolean>;

@@ -65,3 +65,7 @@ export function SetDSHVersion(arg1) {
 export function Status() {
   return window['go']['main']['App']['Status']();
 }
+
+export function UninstallPreinstalledPlugin(arg1) {
+  return window['go']['main']['App']['UninstallPreinstalledPlugin'](arg1);
+}

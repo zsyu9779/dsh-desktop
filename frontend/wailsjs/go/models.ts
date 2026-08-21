@@ -44,7 +44,7 @@ export namespace main {
 	    current: string;
 	    latest: string;
 	    hasUpdate: boolean;
-	    error: string;
+	    error?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new dshUpdateInfo(source);
