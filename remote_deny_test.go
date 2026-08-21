@@ -2,11 +2,10 @@ package main
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 )
 
-func TestDenyRemote(t *testing.T) {
+func TestIsPreinstalledPluginRoute(t *testing.T) {
 	cases := []struct {
 		path string
 		want bool
@@ -32,6 +31,7 @@ func TestDenyRemote(t *testing.T) {
 		// Not blocked: unrelated paths and prefix boundaries.
 		{"/", false},
 		{"/api/status", false},
+		{"/api/session.list", false},
 		{"/diff-review", false},      // no trailing slash, not the blocked prefix
 		{"/api/file-changes", false}, // no trailing slash, not the blocked prefix
 		{"/diff-reviewary/status", false},
@@ -39,33 +39,31 @@ func TestDenyRemote(t *testing.T) {
 		{"/other/diff-review/status", false}, // not a path prefix
 	}
 	for _, c := range cases {
-		if got := shouldDenyRemote(c.path); got != c.want {
-			t.Errorf("shouldDenyRemote(%q) = %v, want %v", c.path, got, c.want)
+		if got := isPreinstalledPluginRoute(c.path); got != c.want {
+			t.Errorf("isPreinstalledPluginRoute(%q) = %v, want %v", c.path, got, c.want)
 		}
 	}
 }
 
-func TestRemoteProxyDeniesPreinstalledPluginRoutes(t *testing.T) {
-	r := &remoteManager{enabled: true, token: "tok"}
-	h := r.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
+func TestPreinstalledPluginRouteForbiddenOverRemote(t *testing.T) {
+	m, base := newTestRemote(t)
+	jwt := pairJWT(t, m, base)
 
-	// A paired request with a valid cookie to a denied route must be blocked.
-	denied := httptest.NewRequest(http.MethodGet, "http://remote/diff-review/status", nil)
-	denied.AddCookie(&http.Cookie{Name: remoteCookieName, Value: "tok"})
-	deniedRec := httptest.NewRecorder()
-	h.ServeHTTP(deniedRec, denied)
-	if deniedRec.Code != http.StatusForbidden {
-		t.Errorf("denied route status = %d, want %d", deniedRec.Code, http.StatusForbidden)
+	for _, path := range []string{
+		"/diff-review/status",
+		"/diff-review/files",
+		"/api/file-changes/reveal",
+		"/api/file-changes/changes",
+	} {
+		resp := authedReq(t, base, jwt, path)
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("%s status = %d, want 403", path, resp.StatusCode)
+		}
 	}
 
 	// A paired request to an unrelated route still passes through.
-	allowed := httptest.NewRequest(http.MethodGet, "http://remote/api/status", nil)
-	allowed.AddCookie(&http.Cookie{Name: remoteCookieName, Value: "tok"})
-	allowedRec := httptest.NewRecorder()
-	h.ServeHTTP(allowedRec, allowed)
-	if allowedRec.Code != http.StatusOK {
-		t.Errorf("allowed route status = %d, want %d", allowedRec.Code, http.StatusOK)
+	resp := authedReq(t, base, jwt, "/api/session.list")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("non-plugin route status = %d, want 200", resp.StatusCode)
 	}
 }

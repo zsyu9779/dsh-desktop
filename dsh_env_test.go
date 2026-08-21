@@ -6,17 +6,19 @@ import (
 	"testing"
 )
 
+// testNodeInstall mirrors a plausible nodeInstallation for buildCommand, which
+// never executes the child so the paths only need to be non-empty.
+func testNodeInstall() nodeInstallation {
+	return nodeInstallation{nodePath: "/usr/local/bin/node", npmPath: "/usr/local/bin/npm", version: "22.19.0"}
+}
+
 func TestBuildCommandExposesDSHWorkspace(t *testing.T) {
 	ws := t.TempDir()
 	t.Setenv("DSH_WORKSPACE", ws)
 
 	m := &dshManager{}
-	cmd, err := m.buildCommand(context.Background(), 12345)
+	cmd, err := m.buildCommand(context.Background(), 12345, testNodeInstall())
 	if err != nil {
-		// npx may be absent in some environments; that's not what this test asserts.
-		if _, lookErr := findExecutable("npx"); lookErr != nil {
-			t.Skipf("npx not available: %v", lookErr)
-		}
 		t.Fatalf("buildCommand: %v", err)
 	}
 
@@ -44,11 +46,8 @@ func TestBuildCommandDefaultWorkspaceIsHome(t *testing.T) {
 	}
 
 	m := &dshManager{}
-	cmd, err := m.buildCommand(context.Background(), 12345)
+	cmd, err := m.buildCommand(context.Background(), 12345, testNodeInstall())
 	if err != nil {
-		if _, lookErr := findExecutable("npx"); lookErr != nil {
-			t.Skipf("npx not available: %v", lookErr)
-		}
 		t.Fatalf("buildCommand: %v", err)
 	}
 
