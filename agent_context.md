@@ -90,7 +90,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 
 ## 6. dsh 内部机制与坑（查源码时很有用）
 
-- dsh 源码位置（已安装的 npm 包，可直接读）：`/Users/zhangshiyu/.dsh-desktop/npm-cache-v1/_npx/6c7f445d1bf61956/node_modules/@deepseek-ai/`
+- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.1.0-rc.8/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
 - `dsh web` = `--profile web` 别名；`dsh-host-webserver` 只允许 host `127.0.0.1` 或 `0.0.0.0`。
 - **`--host 0.0.0.0` 被官方硬拒**（`dsh-web-app/lib/startup.js`）：「would expose remote code execution to the network」。所以不能直接绑公网，只能走反代。
 - `/api` trust 栅栏（`dsh-client-connection/lib/index.js` 的 `isTrustedApiRequest`）：Host 必须 loopback 或受信；Origin 必须匹配 Host；`sec-fetch-site` 不能是 cross-site。
