@@ -1,0 +1,13 @@
+# dsh-subagent-max bundle patch: inserts its own host+client plugin row so
+# `dsh plugin add @aaravarr/dsh-subagent-max` activates it as a profile layer.
+# The host half (lib/index.js) registers the subagent_with_model tool; the client
+# half (lib/client.js) is discovered through the same row's `dsh.client`
+# declaration + `exports["./client"]` by the web modules node half.
+- insert:
+    - id: dsh-subagent-max
+      name: '@aaravarr/dsh-subagent-max'
+      config:
+        subagentProvider: spawn
+        toolName: subagent_with_model
+        backgroundMode: continuable
+        maxDepth: 3

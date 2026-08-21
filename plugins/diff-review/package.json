@@ -1,0 +1,96 @@
+{
+  "name": "dsh-plugin-diff-review",
+  "version": "0.1.0",
+  "description": "Codex-style diff review for DeepSeek Harness: review every uncommitted change of the current project (staged, unstaged and untracked), inspect per-file unified diffs, and accept (stage) or revert (discard) changes — one file at a time or all at once.",
+  "contributors": [
+    "Civitasv"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "client.js",
+    "README.md",
+    "README.en.md",
+    "LICENSE",
+    "docs",
+    "install.sh",
+    "install.ps1"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-theme",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-api-remotes"
+      ],
+      "immediately": true
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:git": "node scripts/git-semantics-test.mjs",
+    "test:session": "node scripts/session-extract-test.mjs",
+    "test:package": "node scripts/review-package-test.mjs",
+    "test:files-path": "node scripts/files-path-test.mjs",
+    "test:file-tree-layout": "node scripts/file-tree-layout-test.mjs",
+    "test:diff-line-layout": "node scripts/diff-line-layout-test.mjs",
+    "test:unified-line-numbers": "node scripts/unified-line-numbers-test.mjs",
+    "test:split-diff-layout": "node scripts/split-diff-layout-test.mjs",
+    "test:commit-scope-stats": "node scripts/commit-scope-stats-test.mjs",
+    "test:readonly-scope-actions": "node scripts/readonly-scope-actions-test.mjs",
+    "test:comment-navigation": "node scripts/comment-navigation-test.mjs",
+    "test:nonrepo-last-turn": "node scripts/nonrepo-last-turn-test.mjs",
+    "test:ui": "node scripts/ui-smoke-test.mjs"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.12",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "@codemirror/view": "^6.43.8",
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "diff": "^9.0.0",
+    "react-arborist": "^3.16.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-attachment": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-layout": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-settings": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
+    "@types/diff": "^8.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  },
+  "license": "MIT"
+}

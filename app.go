@@ -25,6 +25,14 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	enableNativeFullscreen()
+	// Pre-install the shipped plugins before the harness boots so it picks
+	// them up on first load. Failure is non-fatal: the shell still starts and
+	// only loses the preinstalled plugins, so log and continue.
+	if status, err := runPreinstall(a.dsh.logf); err != nil {
+		a.dsh.logf("preinstall: %v", err)
+	} else {
+		a.dsh.logf("%s", status)
+	}
 	a.dsh.start()
 }
 
@@ -113,6 +121,16 @@ func (a *App) RevokeDevice(deviceID string) bool {
 func (a *App) SetAllowPrivileged(enabled bool) {
 	a.remote.setAllowPrivileged(enabled)
 	a.emitRemote(a.remote.status())
+}
+
+// UninstallPreinstalledPlugin removes a shipped plugin by id, returning whether
+// it was uninstalled.
+func (a *App) UninstallPreinstalledPlugin(id string) bool {
+	if err := uninstallPreinstalledPlugin(id, a.dsh.logf); err != nil {
+		a.dsh.logf("uninstall %s failed: %v", id, err)
+		return false
+	}
+	return true
 }
 
 // emitRemote pushes a remote status snapshot to the frontend.
