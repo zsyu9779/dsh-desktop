@@ -32,7 +32,7 @@
     "applicationCategory": "DeveloperApplication",
     "applicationSubCategory": "AI coding agent desktop client",
     "operatingSystem": ["macOS", "Windows", "Linux"],
-    "softwareVersion": "0.1.5",
+    "softwareVersion": "0.1.6",
     "isAccessibleForFree": true,
     "license": "https://opensource.org/license/mit",
     "codeRepository": "https://github.com/zsyu9779/dsh-desktop",
@@ -44,7 +44,7 @@
       "url": "https://github.com/zsyu9779"
     },
     "isBasedOn": "https://github.com/deepseek-ai/deepseek-harness",
-    "softwareRequirements": "Node.js 18 or later"
+    "softwareRequirements": "Node.js 22.19 or later on the 22.x line, or Node.js 24 or later"
   }
   </script>
 </head>
@@ -74,10 +74,10 @@
         <h1>Harness power.<br><em>Desktop weight.</em></h1>
         <p class="lede">A lightweight Wails desktop shell for the official DeepSeek Harness Web UI. Native window, managed lifecycle, and three-platform releases—without a bundled browser runtime.</p>
         <div class="actions">
-          <a class="button button-primary" href="download/">Download v0.1.5</a>
+          <a class="button button-primary" href="download/">Download v0.1.6</a>
           <a class="button button-secondary" href="https://github.com/zsyu9779/dsh-desktop">View source</a>
         </div>
-        <p class="microcopy">Requires Node.js 18+ · MIT licensed · Not affiliated with DeepSeek</p>
+        <p class="microcopy">Requires Node.js 22.19+ (22.x) or 24+ · MIT licensed · Not affiliated with DeepSeek</p>
       </div>
 
       <div class="window" aria-label="Architecture preview showing the desktop app starting DeepSeek Harness">
@@ -88,8 +88,8 @@
           <span class="window-title">dsh-desktop — local</span>
         </div>
         <div class="window-body">
-          <p class="terminal-line"><strong>●</strong> checking <span class="blue">node</span> and <span class="blue">npx</span></p>
-          <p class="terminal-line"><strong>●</strong> starting @deepseek-ai/dsh@0.1.0-rc.6</p>
+          <p class="terminal-line"><strong>●</strong> checking <span class="blue">node</span> and <span class="blue">npm</span></p>
+          <p class="terminal-line"><strong>●</strong> starting @deepseek-ai/dsh@0.1.0-rc.8</p>
           <p class="terminal-line"><strong>●</strong> ready on 127.0.0.1:3080</p>
           <div class="window-card">
             <span class="window-card-label">Desktop host</span>
@@ -132,7 +132,7 @@
           <article class="card">
             <span class="card-number">03 / CLEAN UP</span>
             <h3>Close cleanly</h3>
-            <p>Terminates the complete npx → node → dsh process tree when the desktop app exits normally.</p>
+            <p>Terminates the complete npm → pnpm → node → dsh process tree when the desktop app exits normally.</p>
           </article>
         </div>
       </div>
@@ -145,7 +145,7 @@
           <h2>Small download. Existing runtime.</h2>
         </div>
         <div>
-          <p class="section-intro">The app uses the operating system WebView and downloads the pinned DSH package through npx. That keeps the desktop packages around 4–11 MB, but means Node.js 18+ must already be installed.</p>
+          <p class="section-intro">The app uses the operating system WebView and downloads the pinned DSH package through npm and pnpm. That keeps the desktop packages around 4–11 MB, but means Node.js 22.19+ on the 22.x line, or Node.js 24+, must already be installed.</p>
           <div class="actions">
             <a class="button button-secondary" href="compare/">See the comparison</a>
             <a class="button button-secondary" href="architecture/">Read the architecture</a>
@@ -160,7 +160,7 @@
           <span class="section-kicker">Download</span>
           <div>
             <h2>One release. Three platforms.</h2>
-            <p class="section-intro">Version 0.1.5 wraps <code>@deepseek-ai/dsh@0.1.0-rc.6</code> and adds QR-paired phone access on a trusted LAN. Packages are built by GitHub Actions from the public source.</p>
+            <p class="section-intro">Version 0.1.6 wraps <code>@deepseek-ai/dsh@0.1.0-rc.8</code> while retaining QR-paired phone access on a trusted LAN. Packages are built by GitHub Actions from the public source.</p>
           </div>
         </div>
         <div class="download-grid">
@@ -195,7 +195,7 @@
         </div>
         <div>
           <pre class="code-block" aria-label="Runtime architecture diagram">DeepSeek Harness Desktop (Wails / Go)
-└── npx @deepseek-ai/dsh web
+└── npm exec → pnpm dlx @deepseek-ai/dsh web --no-open
     └── node / dsh
         └── Web UI on 127.0.0.1
 
@@ -221,7 +221,7 @@ window · launch · logs · shutdown</pre>
       <div class="footer-column">
         <strong>Project</strong>
         <a href="download/">Download</a>
-        <a href="releases/v0.1.5/">v0.1.5 notes</a>
+        <a href="releases/v0.1.6/">v0.1.6 notes</a>
         <a href="https://github.com/zsyu9779/dsh-desktop">GitHub</a>
       </div>
       <div class="footer-column">

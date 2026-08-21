@@ -184,8 +184,8 @@ DeepSeek Harness 通过 npm 发布。桌面应用使用 Node.js、`npm exec` 和
 推送 `v*` 标签会触发 GitHub Actions，为 macOS universal、Windows amd64 和 Linux amd64 构建产物，并创建 GitHub Release。
 
 ```bash
-git tag v0.1.5
-git push origin v0.1.5
+git tag v0.1.6
+git push origin v0.1.6
 ```
 
 更新 DeepSeek Harness 版本时，请修改 `dsh.go` 中的 `dshPackage` 常量并完成真实启动测试。

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Download DeepSeek Harness Desktop for macOS, Windows & Linux</title>
-  <meta name="description" content="Download DeepSeek Harness Desktop v0.1.5 for macOS, Windows or Linux. Lightweight Wails packages from 4.2 MB to 10.8 MB.">
+  <meta name="description" content="Download DeepSeek Harness Desktop v0.1.6 for macOS, Windows or Linux. Lightweight Wails packages for all three platforms.">
   <link rel="canonical" href="https://zsyu9779.github.io/dsh-desktop/download/">
   <link rel="icon" href="../assets/icon.png">
   <link rel="stylesheet" href="../assets/site.css">
@@ -17,9 +17,9 @@
   </div></header>
   <main id="main">
     <section class="page-hero"><div class="shell">
-      <p class="eyebrow">Release v0.1.5</p>
+      <p class="eyebrow">Release v0.1.6</p>
       <h1>Download the lightweight DeepSeek Harness desktop app.</h1>
-      <p class="lede">Choose your platform below. Every package is built from the public repository by GitHub Actions and requires Node.js 18 or later.</p>
+      <p class="lede">Choose your platform below. Every package is built from the public repository by GitHub Actions and requires Node.js 22.19+ on the 22.x line, or Node.js 24+.</p>
     </div></section>
     <section class="section"><div class="shell">
       <div class="download-grid">
@@ -29,7 +29,7 @@
       </div>
       <div class="prose">
         <h2>Before you install</h2>
-        <p>Install <a href="https://nodejs.org/">Node.js 18 or later</a> and verify that both <code>node</code> and <code>npx</code> are available. The desktop app uses npx to download and start the pinned <code>@deepseek-ai/dsh@0.1.0-rc.6</code> package.</p>
+        <p>Install <a href="https://nodejs.org/">Node.js 22.19+ on the 22.x line, or Node.js 24+</a> and verify that both <code>node</code> and <code>npm</code> are available. The desktop app uses npm and pnpm to download and start the pinned <code>@deepseek-ai/dsh@0.1.0-rc.8</code> package.</p>
         <h2>macOS</h2>
         <p>Open the DMG and drag the app into Applications. The current build is not notarized. If Gatekeeper blocks it, right-click the app and choose Open, or remove the quarantine attribute only after verifying that the package came from this repository.</p>
         <pre class="code-block">xattr -d com.apple.quarantine "/Applications/dsh-desktop.app"</pre>

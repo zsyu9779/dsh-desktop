@@ -13,8 +13,8 @@
     "mainEntity": [
       {"@type":"Question","name":"Does DeepSeek Harness have a desktop app?","acceptedAnswer":{"@type":"Answer","text":"DeepSeek AI currently ships DeepSeek Harness primarily as a CLI and local Web UI. DeepSeek Harness Desktop is an unofficial community app that hosts that Web UI in a native Wails window on macOS, Windows and Linux."}},
       {"@type":"Question","name":"Is this an official DeepSeek product?","acceptedAnswer":{"@type":"Answer","text":"No. DeepSeek Harness Desktop is an independent, open-source community project and is not affiliated with DeepSeek AI."}},
-      {"@type":"Question","name":"Why does the app require Node.js?","acceptedAnswer":{"@type":"Answer","text":"The lightweight desktop shell uses npx to download and start a pinned version of the official @deepseek-ai/dsh package. Not bundling Node.js keeps the release packages around 4–11 MB."}},
-      {"@type":"Question","name":"Which platforms are supported?","acceptedAnswer":{"@type":"Answer","text":"Version 0.1.5 provides a universal macOS DMG for Apple Silicon and Intel, a Windows amd64 executable and a Linux amd64 archive."}}
+      {"@type":"Question","name":"Why does the app require Node.js?","acceptedAnswer":{"@type":"Answer","text":"The lightweight desktop shell uses npm and pnpm to download and start a pinned version of the official @deepseek-ai/dsh package. Not bundling Node.js keeps the release packages around 4–11 MB."}},
+      {"@type":"Question","name":"Which platforms are supported?","acceptedAnswer":{"@type":"Answer","text":"Version 0.1.6 provides a universal macOS DMG for Apple Silicon and Intel, a Windows amd64 executable and a Linux amd64 archive."}}
     ]
   }
   </script>
@@ -27,14 +27,14 @@
     <section class="section"><div class="shell faq-list">
       <article class="faq-item"><h2>Does DeepSeek Harness have a desktop app?</h2><p>DeepSeek AI currently ships DeepSeek Harness primarily as a CLI and local Web UI. DeepSeek Harness Desktop is an unofficial community app that hosts that Web UI in a native Wails window on macOS, Windows and Linux.</p></article>
       <article class="faq-item"><h2>Is this an official DeepSeek product?</h2><p>No. It is independent, open source and not affiliated with DeepSeek AI. The official source is <a href="https://github.com/deepseek-ai/deepseek-harness">deepseek-ai/deepseek-harness</a>.</p></article>
-      <article class="faq-item"><h2>Why does the app require Node.js?</h2><p>The lightweight shell uses npx to download and start a pinned version of <code>@deepseek-ai/dsh</code>. Not bundling Node.js keeps release packages around 4–11 MB.</p></article>
-      <article class="faq-item"><h2>Which platforms are supported?</h2><p>Version 0.1.5 provides a universal macOS DMG for Apple Silicon and Intel, a Windows amd64 executable and a Linux amd64 archive.</p></article>
+      <article class="faq-item"><h2>Why does the app require Node.js?</h2><p>The lightweight shell uses npm and pnpm to download and start a pinned version of <code>@deepseek-ai/dsh</code>. Not bundling Node.js keeps release packages around 4–11 MB.</p></article>
+      <article class="faq-item"><h2>Which platforms are supported?</h2><p>Version 0.1.6 provides a universal macOS DMG for Apple Silicon and Intel, a Windows amd64 executable and a Linux amd64 archive.</p></article>
       <article class="faq-item"><h2>Does it change the official Harness UI?</h2><p>No. The desktop app loads the upstream Web UI. Models, sessions, plugins, skills and agent behavior remain upstream responsibilities.</p></article>
       <article class="faq-item"><h2>Where are sessions and credentials stored?</h2><p>Those are managed by DeepSeek Harness. The shell stores its startup log under <code>~/.dsh-desktop/logs/</code> and passes through <code>DSH_HOME</code> when configured.</p></article>
       <article class="faq-item"><h2>Does DSH keep running after I close the app?</h2><p>During a normal close or quit, the app terminates the complete process tree it started. A force-kill or operating-system crash can still prevent graceful cleanup.</p></article>
       <article class="faq-item"><h2>Why might macOS or Windows show a warning?</h2><p>The current packages are not signed or notarized. Confirm that the file came from the project's GitHub Release before choosing to run it.</p></article>
       <article class="faq-item"><h2>Is it fully offline?</h2><p>No. The first start needs npm access to obtain the pinned DSH package unless it is already cached. DSH also needs network access for cloud model providers.</p></article>
-      <article class="faq-item"><h2>What version of DeepSeek Harness does it use?</h2><p>Desktop v0.1.5 pins <code>@deepseek-ai/dsh@0.1.0-rc.6</code> to avoid unexpected upstream changes between launches.</p></article>
+      <article class="faq-item"><h2>What version of DeepSeek Harness does it use?</h2><p>Desktop v0.1.6 pins <code>@deepseek-ai/dsh@0.1.0-rc.8</code> to avoid unexpected upstream changes between launches.</p></article>
     </div></section>
   </main>
   <footer class="site-footer"><div class="shell footer-grid"><div><p class="footer-title">DeepSeek Harness Desktop</p><p class="footer-copy">Still unsure? Open an issue with your platform and use case.</p></div><div class="footer-column"><strong>Project</strong><a href="../">Home</a><a href="../download/">Download</a></div><div class="footer-column"><strong>Learn</strong><a href="../compare/">Compare</a><a href="../security/">Security</a></div><div class="footer-column"><strong>Support</strong><a href="../troubleshooting/">Troubleshooting</a><a href="https://github.com/zsyu9779/dsh-desktop/issues">Issues</a></div></div></footer>

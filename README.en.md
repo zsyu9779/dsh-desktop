@@ -28,9 +28,9 @@ Most DeepSeek Harness desktop shells are built on **Electron**. This project tak
 
 ## How it works
 
-- On launch, spawns `npx -y @deepseek-ai/dsh@0.1.0-rc.6 web` on a managed port (prefers `3080`, falls back to a random port if taken)
+- On launch, uses `npm exec` to bootstrap `pnpm@11.7.0`, then starts `@deepseek-ai/dsh@0.1.0-rc.8 web --no-open` on a managed port (prefers `3080`, falls back to a random port if taken)
 - Polls the local Web UI until ready, then redirects the window to that address
-- Cleans up the entire process tree on exit (npx → node → dsh); if the service exits unexpectedly, shows a native dialog and quits
+- Cleans up the entire process tree on exit (npm → pnpm → node → dsh); if the service exits unexpectedly, shows a native dialog and quits
 
 All sessions, models, plugins, and settings are provided by upstream DeepSeek Harness — this project does not modify or re-implement its UI.
 
@@ -72,7 +72,7 @@ Get the installer for your platform from [Releases](https://github.com/zsyu9779/
 ## Requirements
 
 - Go 1.23+
-- Node.js 18+ (with npx)
+- Node.js 22.19+ on the 22.x line, or Node.js 24+
 - Wails v2: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 
 ## Build
@@ -93,8 +93,8 @@ wails dev
 Push a `v*` tag to trigger GitHub Actions to build and publish macOS / Windows / Linux installers to Releases:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.6
+git push origin v0.1.6
 ```
 
 ## Configuration (environment variables)

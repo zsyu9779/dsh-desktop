@@ -18,13 +18,13 @@
 ├── native window and application lifecycle
 ├── environment checks and local log
 ├── loopback port selection and readiness probe
-└── npx @deepseek-ai/dsh@0.1.0-rc.6 web
+└── npm exec → pnpm dlx @deepseek-ai/dsh@0.1.0-rc.8 web --no-open
     └── node / dsh
         └── official Web UI on 127.0.0.1:&lt;port&gt;</pre>
       <h2>Startup sequence</h2>
-      <ol><li>Locate Node.js and npx on the user's machine.</li><li>Select port 3080 or another available loopback port.</li><li>Start the pinned <code>@deepseek-ai/dsh</code> package with an application-specific npm cache.</li><li>Probe the local HTTP endpoint until it becomes ready.</li><li>Load the official Web UI inside the preserved Wails window.</li><li>Show startup status and logs if the runtime cannot become ready.</li></ol>
+      <ol><li>Locate a compatible Node.js installation and npm on the user's machine.</li><li>Select port 3080 or another available loopback port.</li><li>Use npm to bootstrap the pinned pnpm launcher, then start the pinned <code>@deepseek-ai/dsh</code> package with application-specific caches.</li><li>Probe the local HTTP endpoint until it becomes ready.</li><li>Load the official Web UI inside the preserved Wails window.</li><li>Show startup status and logs if the runtime cannot become ready.</li></ol>
       <h2>Shutdown sequence</h2>
-      <p>On a normal application exit, the host terminates the complete process group or process tree created by <code>npx → node → dsh</code>. Platform-specific implementations handle Unix-like systems and Windows separately.</p>
+      <p>On a normal application exit, the host terminates the complete process group or process tree created by <code>npm → pnpm → node → dsh</code>. Platform-specific implementations handle Unix-like systems and Windows separately.</p>
       <h2>Ownership boundary</h2>
       <table><thead><tr><th>Desktop host owns</th><th>DeepSeek Harness owns</th></tr></thead><tbody><tr><td>Native window</td><td>Agent loop and tools</td></tr><tr><td>Environment checks</td><td>Models and credentials</td></tr><tr><td>Port and readiness</td><td>Sessions and profiles</td></tr><tr><td>Logs and process cleanup</td><td>Plugins, skills and interface</td></tr></tbody></table>
       <h2>Why Wails?</h2>
