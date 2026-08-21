@@ -36,6 +36,7 @@ DeepSeek Harness Desktop 是 DeepSeek Harness 的桌面启动器和原生容器�
 - **可靠的进程管理**：关闭窗口或退出应用时清理 `npm → pnpm → node → dsh` 进程树。
 - **稳定的窗口恢复**：保留 Wails 原生容器，修复 macOS 最小化后恢复白屏的问题。
 - **局域网手机远程**：同一 Wi-Fi 下扫码即可在手机浏览器操控当前 DeepSeek Harness。
+- **预装常用插件**：启动时把 diff-review、subagent-max、file-changes、open-editor 四个插件装进 DSH profile，并做版本跟踪与升级。
 - **启动状态与错误提示**：显示环境检查、首次下载、服务启动和失败状态。
 - **日志与故障排查**：可在启动页查看日志，也会写入本地日志文件。
 - **可配置工作目录**：支持通过环境变量覆盖命令、工作区和 DSH Home。
@@ -104,7 +105,7 @@ DeepSeek Harness Desktop (Wails / Go)
         └── Local Web UI on 127.0.0.1
 ```
 
-应用默认固定上游版本 `@deepseek-ai/dsh@0.1.0-rc.8`，避免每次启动因上游最新版变化而产生不可预测的行为。
+应用默认固定上游版本 `@deepseek-ai/dsh@0.1.1-rc.2`，避免每次启动因上游最新版变化而产生不可预测的行为。
 
 ## 配置
 
@@ -184,8 +185,8 @@ DeepSeek Harness 通过 npm 发布。桌面应用使用 Node.js、`npm exec` 和
 推送 `v*` 标签会触发 GitHub Actions，为 macOS universal、Windows amd64 和 Linux amd64 构建产物，并创建 GitHub Release。
 
 ```bash
-git tag v0.1.6
-git push origin v0.1.6
+git tag v0.1.7
+git push origin v0.1.7
 ```
 
 更新 DeepSeek Harness 版本时，请修改 `dsh.go` 中的 `dshPackage` 常量并完成真实启动测试。

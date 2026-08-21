@@ -9,3 +9,4 @@ https://zsyu9779.github.io/dsh-desktop/troubleshooting/
 https://zsyu9779.github.io/dsh-desktop/releases/v0.1.4/
 https://zsyu9779.github.io/dsh-desktop/releases/v0.1.5/
 https://zsyu9779.github.io/dsh-desktop/releases/v0.1.6/
+https://zsyu9779.github.io/dsh-desktop/releases/v0.1.7/

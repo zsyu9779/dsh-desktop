@@ -12,7 +12,7 @@
   },
   "info": {
     "productName": "DeepSeek Harness",
-    "productVersion": "0.1.6",
+    "productVersion": "0.1.7",
     "copyright": "Unofficial desktop shell for DeepSeek Harness",
     "comments": "Unofficial Wails shell wrapping the DeepSeek Harness web UI."
   }

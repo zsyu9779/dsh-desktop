@@ -21,7 +21,7 @@ import (
 const (
 	// dshPackage is the pinned upstream DeepSeek Harness release. Bump this to
 	// track a newer release, or set DSH_COMMAND to override the launcher entirely.
-	dshPackage = "@deepseek-ai/dsh@0.1.0-rc.8"
+	dshPackage = "@deepseek-ai/dsh@0.1.1-rc.2"
 
 	// DSH supports Node.js 22 from 22.19 onward, skips the unsupported Node.js 23
 	// line, and supports Node.js 24 and newer.

@@ -28,7 +28,7 @@ Most DeepSeek Harness desktop shells are built on **Electron**. This project tak
 
 ## How it works
 
-- On launch, uses `npm exec` to bootstrap `pnpm@11.7.0`, then starts `@deepseek-ai/dsh@0.1.0-rc.8 web --no-open` on a managed port (prefers `3080`, falls back to a random port if taken)
+- On launch, uses `npm exec` to bootstrap `pnpm@11.7.0`, then starts `@deepseek-ai/dsh@0.1.1-rc.2 web --no-open` on a managed port (prefers `3080`, falls back to a random port if taken)
 - Polls the local Web UI until ready, then redirects the window to that address
 - Cleans up the entire process tree on exit (npm → pnpm → node → dsh); if the service exits unexpectedly, shows a native dialog and quits
 
@@ -41,6 +41,7 @@ All sessions, models, plugins, and settings are provided by upstream DeepSeek Ha
 - Native window / Dock icon / app menu
 - Launch splash: status, retry, open in browser, view logs
 - LAN phone remote: scan a QR code on the same Wi-Fi to control the current DeepSeek Harness from a mobile browser
+- Preinstalled plugins: ships diff-review, subagent-max, file-changes and open-editor into the DSH profile at launch, version-tracked and upgradeable
 - Auto-installs and pins the DeepSeek Harness version
 - Logs to `~/.dsh-desktop/logs/dsh.log`
 
@@ -93,8 +94,8 @@ wails dev
 Push a `v*` tag to trigger GitHub Actions to build and publish macOS / Windows / Linux installers to Releases:
 
 ```bash
-git tag v0.1.6
-git push origin v0.1.6
+git tag v0.1.7
+git push origin v0.1.7
 ```
 
 ## Configuration (environment variables)
