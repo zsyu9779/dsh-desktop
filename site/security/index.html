@@ -14,7 +14,7 @@
     <section class="page-hero"><div class="shell"><p class="eyebrow">Security notes</p><h1>Know which layer you are trusting.</h1><p class="lede">This page documents the desktop shell's boundaries. DeepSeek Harness has its own permissions, credentials and sandbox behavior; consult the upstream project for those controls.</p></div></section>
     <section class="section"><div class="prose">
       <h2>Local service exposure</h2>
-      <p>The desktop app starts DSH on a loopback address and loads it locally. It does not intentionally expose the service to the LAN. Port 3080 is preferred; another available local port is selected when necessary.</p>
+      <p>The desktop app always starts DSH itself on a loopback address. Phone remote is off by default; when the Owner explicitly enables it, the desktop shell opens a self-signed HTTPS proxy on the LAN. Devices must complete one-time QR Pairing and use a revocable Device credential. Paired Devices can be revoked individually, and sensitive settings/credential methods remain behind a separate Host-side grant.</p>
       <h2>What the desktop shell can access</h2>
       <p>The Go host starts a local process, opens the embedded Web UI, reads startup output and writes its own log. Project files, tools, model credentials, sessions and plugins are managed by the upstream Harness runtime rather than reimplemented by this shell.</p>
       <h2>Data locations</h2>
