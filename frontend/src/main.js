@@ -29,6 +29,77 @@ const remoteDeviceList = document.getElementById('remote-device-list');
 
 let remoteEnabled = false;
 
+// --- DSH version update check ---
+const updateEl = document.getElementById('update');
+const updateCurrent = document.getElementById('update-current');
+const updateHint = document.getElementById('update-hint');
+const updateLatest = document.getElementById('update-latest');
+const btnCheckUpdate = document.getElementById('btn-check-update');
+const btnUpdate = document.getElementById('btn-update');
+
+let updateBusy = false;
+
+function renderUpdate(info) {
+    if (!info) return;
+    updateCurrent.textContent = info.current || '—';
+    updateEl.hidden = false;
+    if (info.error) {
+        updateHint.textContent = '检查更新失败（网络不可用或 npm registry 无响应）';
+        updateHint.hidden = false;
+        btnUpdate.hidden = true;
+        return;
+    }
+    if (info.hasUpdate) {
+        updateLatest.textContent = info.latest;
+        updateHint.textContent = '发现新版本';
+        updateHint.hidden = false;
+        btnUpdate.hidden = updateBusy;
+    } else {
+        updateHint.textContent = '已是最新版本';
+        updateHint.hidden = false;
+        btnUpdate.hidden = true;
+    }
+}
+
+function setUpdateBusy(busy, msg) {
+    updateBusy = busy;
+    btnCheckUpdate.disabled = busy;
+    btnUpdate.disabled = busy;
+    if (msg) {
+        updateHint.textContent = msg;
+        updateHint.hidden = false;
+    }
+    if (busy) btnUpdate.hidden = true;
+}
+
+btnCheckUpdate.addEventListener('click', async () => {
+    try {
+        setUpdateBusy(true, '正在检查更新…');
+        renderUpdate(await App.CheckDSHUpdate());
+    } catch (err) {
+        console.error(err);
+        updateHint.textContent = '检查更新失败';
+        updateHint.hidden = false;
+    } finally {
+        setUpdateBusy(false);
+    }
+});
+
+btnUpdate.addEventListener('click', async () => {
+    const target = updateLatest.textContent;
+    if (!target) return;
+    try {
+        setUpdateBusy(true, '正在升级到 ' + target + ' 并重启…');
+        await App.SetDSHVersion(target);
+        renderUpdate(await App.CheckDSHUpdate());
+    } catch (err) {
+        console.error(err);
+        updateHint.textContent = '升级失败：' + err;
+        updateHint.hidden = false;
+        setUpdateBusy(false);
+    }
+});
+
 function setBusy(busy) {
     spinner.classList.toggle('hidden', !busy);
     progress.classList.toggle('hidden', !busy);
@@ -235,7 +306,9 @@ document.getElementById('btn-remote-copy').addEventListener('click', async () =>
 
 runtime.EventsOn('status', handleStatus);
 runtime.EventsOn('remote', handleRemote);
+runtime.EventsOn('dsh-update', renderUpdate);
 App.Status().then(handleStatus).catch((err) => console.error(err));
+App.DSHVersion().then((v) => { updateCurrent.textContent = v || '—'; }).catch(() => {});
 
 window.addEventListener('focus', refreshHarnessLayer);
 window.addEventListener('pageshow', refreshHarnessLayer);

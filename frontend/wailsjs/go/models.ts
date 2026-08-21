@@ -40,6 +40,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class dshUpdateInfo {
+	    current: string;
+	    latest: string;
+	    hasUpdate: boolean;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new dshUpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.current = source["current"];
+	        this.latest = source["latest"];
+	        this.hasUpdate = source["hasUpdate"];
+	        this.error = source["error"];
+	    }
+	}
 	export class remoteStatus {
 	    enabled: boolean;
 	    allowPrivileged: boolean;

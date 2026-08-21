@@ -34,6 +34,18 @@ func (a *App) startup(ctx context.Context) {
 		a.dsh.logf("%s", status)
 	}
 	a.dsh.start()
+
+	// Background update check: query the npm registry for a newer DSH release
+	// and push the result to the splash screen without blocking startup.
+	go func() {
+		info := a.CheckDSHUpdate()
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "dsh-update", info)
+		}
+		if info.HasUpdate {
+			a.dsh.logf("发现新的 DSH 版本: %s (当前 %s)", info.Latest, info.Current)
+		}
+	}()
 }
 
 // shutdown is called when the app is about to exit.

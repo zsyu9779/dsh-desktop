@@ -404,7 +404,7 @@ func (m *dshManager) buildCommand(ctx context.Context, port int, nodeInstall nod
 		// minutes on that graph before the CLI starts.
 		args = append([]string{
 			"exec", "--package=" + pnpmPackage, "--", "pnpm",
-			"--config.store-dir=" + managedPNPMStoreDir(), "dlx", dshPackage,
+			"--config.store-dir=" + managedPNPMStoreDir(), "dlx", pinnedDSHPackage(),
 		}, webArgs...)
 	}
 

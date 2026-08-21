@@ -30,6 +30,13 @@
 
         <div class="progress" id="progress" aria-hidden="true"><div class="progress-bar"></div></div>
 
+        <div class="update" id="update" hidden>
+            <span class="update-version">DSH <code id="update-current">—</code></span>
+            <span class="update-hint" id="update-hint" hidden></span>
+            <button class="btn btn-quiet" id="btn-check-update">检查更新</button>
+            <button class="btn" id="btn-update" hidden>升级到 <code id="update-latest"></code></button>
+        </div>
+
         <div class="actions actions-ready" id="actions-ready" hidden>
             <button class="btn btn-primary" id="btn-enter">进入桌面界面</button>
         </div>
