@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/subtle"
 	"crypto/tls"
 	_ "embed"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -331,6 +333,45 @@ func (r *remoteManager) listDevices() []deviceIdentity {
 		return nil
 	}
 	return devices.list()
+}
+
+func (r *remoteManager) lanCredentialFor(deviceID string) (*hostCredential, error) {
+	r.mu.Lock()
+	cred := r.cred
+	devices := r.devices
+	r.mu.Unlock()
+	if devices == nil {
+		devices = newDeviceRegistry(filepath.Join(stateDir(), "devices.json"))
+	}
+	if !devices.exists(deviceID) {
+		return nil, errors.New("Device 没有既有 LAN Pairing")
+	}
+	if cred == nil {
+		var err error
+		cred, err = loadExistingHostCredential(stateDir())
+		if err != nil {
+			return nil, err
+		}
+	}
+	return cred, nil
+}
+
+func (r *remoteManager) lanPublicKey(deviceID string) (string, error) {
+	cred, err := r.lanCredentialFor(deviceID)
+	if err != nil {
+		return "", err
+	}
+	return cred.publicKeyB64(), nil
+}
+
+// signLANPairing signs an Account registration intent only for a Device
+// already authorized by this Host's persisted LAN credential.
+func (r *remoteManager) signLANPairing(deviceID string, message []byte) ([]byte, error) {
+	cred, err := r.lanCredentialFor(deviceID)
+	if err != nil {
+		return nil, err
+	}
+	return ed25519.Sign(cred.privateKey(), message), nil
 }
 
 func (r *remoteManager) revokeDevice(deviceID string) bool {

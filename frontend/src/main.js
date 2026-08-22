@@ -26,8 +26,19 @@ const remoteFp = document.getElementById('remote-fp');
 const remoteAllowPrivileged = document.getElementById('remote-allow-privileged');
 const remoteDevices = document.getElementById('remote-devices');
 const remoteDeviceList = document.getElementById('remote-device-list');
+const accountRemote = document.getElementById('account-remote');
+const accountRemoteMessage = document.getElementById('account-remote-message');
+const accountRemoteSetup = document.getElementById('account-remote-setup');
+const accountRemoteQR = document.getElementById('account-remote-qr');
+const accountRemoteExpiry = document.getElementById('account-remote-expiry');
+const accountRemoteDevices = document.getElementById('account-remote-devices');
+const accountRemoteDeviceList = document.getElementById('account-remote-device-list');
+const lanRegistration = document.getElementById('lan-registration');
+const lanRegistrationList = document.getElementById('lan-registration-list');
 
 let remoteEnabled = false;
+let remoteSetupPoll = null;
+let accountSignedIn = false;
 
 // --- DSH version update check ---
 const updateEl = document.getElementById('update');
@@ -142,6 +153,92 @@ function refreshHarnessLayer() {
 function setReadyUI(visible) {
     actionsReady.hidden = !visible;
     remoteEl.hidden = !visible;
+    accountRemote.hidden = !visible;
+}
+
+function stopRemoteSetupPoll() {
+    if (remoteSetupPoll) window.clearInterval(remoteSetupPoll);
+    remoteSetupPoll = null;
+}
+
+function startRemoteSetupPoll() {
+    stopRemoteSetupPoll();
+    remoteSetupPoll = window.setInterval(async () => {
+        try {
+            handleRemoteSetup(await App.RefreshRemoteSetup());
+        } catch (err) {
+            console.error(err);
+        }
+    }, 2000);
+}
+
+function renderPairedDevices(devices) {
+    accountRemoteDeviceList.innerHTML = '';
+    accountRemoteDevices.hidden = !devices || devices.length === 0;
+    (devices || []).forEach((device) => {
+        const item = document.createElement('li');
+        item.className = 'remote-device';
+        item.textContent = (device.name || 'Device') + ' · ' + device.deviceID;
+        accountRemoteDeviceList.appendChild(item);
+    });
+}
+
+async function renderLANRegistration(pairedDevices) {
+    try {
+        const registered = new Set((pairedDevices || []).map((device) => device.deviceID));
+        const devices = (await App.ListDevices()).filter((device) => !registered.has(device.deviceId));
+        lanRegistrationList.innerHTML = '';
+        lanRegistration.hidden = devices.length === 0;
+        devices.forEach((device) => {
+            const item = document.createElement('li');
+            item.className = 'remote-device';
+            const name = document.createElement('span');
+            name.textContent = device.name || 'LAN Device';
+            const register = document.createElement('button');
+            register.className = 'btn btn-quiet';
+            register.textContent = '登记';
+            register.addEventListener('click', async () => {
+                try {
+                    handleRemoteSetup(await App.RegisterLANPairing(device.deviceId, device.name || 'LAN Device'));
+                } catch (err) {
+                    accountRemoteMessage.textContent = 'LAN Pairing 登记失败：' + err;
+                }
+            });
+            item.appendChild(name);
+            item.appendChild(register);
+            lanRegistrationList.appendChild(item);
+        });
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+function handleRemoteSetup(status) {
+    if (!status) return;
+    accountRemoteMessage.textContent = status.message || '';
+    const pending = status.state === 'pending';
+    const cancelFailed = status.state === 'cancel-failed';
+    accountRemoteSetup.hidden = !pending && !cancelFailed;
+    accountRemoteQR.hidden = !pending || !status.qr;
+    if (status.qr) accountRemoteQR.src = status.qr;
+    accountRemoteExpiry.textContent = pending && status.expiresAt
+        ? '此 QR 将于 ' + new Date(status.expiresAt).toLocaleTimeString() + ' 失效'
+        : '';
+    const start = document.getElementById('btn-account-remote-start');
+    start.textContent = pending ? '等待批准' : '设置';
+    start.disabled = !accountSignedIn || pending || cancelFailed;
+    document.getElementById('btn-account-remote-refresh').hidden = cancelFailed;
+    renderPairedDevices(status.devices);
+    renderLANRegistration(status.devices);
+    if (pending) startRemoteSetupPoll(); else stopRemoteSetupPoll();
+}
+
+function handleAccountStatus(status) {
+    accountSignedIn = status && status.state === 'signed-in';
+    document.getElementById('btn-account-sign-in').textContent = accountSignedIn ? 'Account 已登录' : '登录 Account';
+    document.getElementById('btn-account-sign-in').disabled = accountSignedIn;
+    document.getElementById('btn-account-remote-start').disabled = !accountSignedIn;
+    if (!accountSignedIn && status && status.message) accountRemoteMessage.textContent = status.message;
 }
 
 function handleRemote(s) {
@@ -282,6 +379,7 @@ function handleStatus(s) {
             setReadyUI(true);
             document.getElementById('btn-enter').onclick = () => showHarness(s.url);
             App.RemoteStatus().then(handleRemote).catch((err) => console.error(err));
+            App.RemoteSetupStatus().then(handleRemoteSetup).catch((err) => console.error(err));
             break;
 
         case 'starting':
@@ -335,6 +433,40 @@ document.getElementById('btn-remote-regen').addEventListener('click', async () =
     }
 });
 
+document.getElementById('btn-account-remote-start').addEventListener('click', async () => {
+    try {
+        handleRemoteSetup(await App.StartRemoteSetup());
+    } catch (err) {
+        accountRemoteMessage.textContent = 'Remote setup 失败：' + err;
+    }
+});
+
+document.getElementById('btn-account-sign-in').addEventListener('click', async () => {
+    try {
+        handleAccountStatus(await App.SignInAccount());
+        if (accountSignedIn) handleRemoteSetup(await App.RemoteSetupStatus());
+    } catch (err) {
+        accountRemoteMessage.textContent = 'Account 登录失败：' + err;
+    }
+});
+
+document.getElementById('btn-account-remote-refresh').addEventListener('click', async () => {
+    try {
+        handleRemoteSetup(await App.RefreshRemoteSetup());
+    } catch (err) {
+        accountRemoteMessage.textContent = '刷新失败：' + err;
+    }
+});
+
+document.getElementById('btn-account-remote-cancel').addEventListener('click', async () => {
+    try {
+        handleRemoteSetup(await App.CancelRemoteSetup());
+    } catch (err) {
+        accountRemoteMessage.textContent = '已在本机取消；server 同步失败：' + err;
+        handleRemoteSetup(await App.RemoteSetupStatus());
+    }
+});
+
 remoteAllowPrivileged.addEventListener('change', async () => {
     try {
         await App.SetAllowPrivileged(remoteAllowPrivileged.checked);
@@ -378,6 +510,7 @@ runtime.EventsOn('remote', handleRemote);
 runtime.EventsOn('dsh-update', renderUpdate);
 runtime.EventsOn('notifications', handleNotification);
 App.Status().then(handleStatus).catch((err) => console.error(err));
+App.AccountStatus().then(handleAccountStatus).catch((err) => console.error(err));
 App.DSHVersion().then((v) => { updateCurrent.textContent = v || '—'; }).catch(() => {});
 
 window.addEventListener('focus', refreshHarnessLayer);

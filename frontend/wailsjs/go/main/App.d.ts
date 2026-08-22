@@ -4,6 +4,22 @@ import {main} from '../models';
 
 export function CheckDSHUpdate():Promise<main.dshUpdateInfo>;
 
+export function CancelRemoteSetup():Promise<main.remoteSetupStatus>;
+
+export function AccountStatus():Promise<main.accountStatus>;
+
+export function SignInAccount():Promise<main.accountStatus>;
+
+export function SignOutAccount():Promise<main.accountStatus>;
+
+export function RemoteSetupStatus():Promise<main.remoteSetupStatus>;
+
+export function RefreshRemoteSetup():Promise<main.remoteSetupStatus>;
+
+export function RegisterLANPairing(arg1:string,arg2:string):Promise<main.remoteSetupStatus>;
+
+export function StartRemoteSetup():Promise<main.remoteSetupStatus>;
+
 export function DSHVersion():Promise<string>;
 
 export function DisableRemote():Promise<void>;

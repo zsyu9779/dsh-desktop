@@ -68,9 +68,13 @@ func (s *httpAccountServer) request(ctx context.Context, method, path, accessTok
 	if s.baseURL == "" {
 		return errors.New("Account 服务地址未配置")
 	}
-	encoded, err := json.Marshal(body)
-	if err != nil {
-		return err
+	var encoded []byte
+	var err error
+	if body != nil {
+		encoded, err = json.Marshal(body)
+		if err != nil {
+			return err
+		}
 	}
 	request, err := http.NewRequestWithContext(ctx, method, s.baseURL+path, bytes.NewReader(encoded))
 	if err != nil {

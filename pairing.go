@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -12,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -163,12 +165,8 @@ func stateDir() string {
 }
 
 func loadOrCreateCredential(dir string) (*hostCredential, error) {
-	path := filepath.Join(dir, "credential.json")
-	if data, err := os.ReadFile(path); err == nil {
-		var c hostCredential
-		if json.Unmarshal(data, &c) == nil && len(c.Seed) == ed25519.SeedSize {
-			return &c, nil
-		}
+	if credential, err := loadExistingHostCredential(dir); err == nil {
+		return credential, nil
 	}
 	c, err := newHostCredential()
 	if err != nil {
@@ -178,6 +176,27 @@ func loadOrCreateCredential(dir string) (*hostCredential, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+// loadExistingHostCredential never rotates identity. Callers proving an
+// existing LAN Pairing must fail closed when the original key is unavailable.
+func loadExistingHostCredential(dir string) (*hostCredential, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "credential.json"))
+	if err != nil {
+		return nil, err
+	}
+	var credential hostCredential
+	if err := json.Unmarshal(data, &credential); err != nil {
+		return nil, err
+	}
+	if len(credential.Seed) != ed25519.SeedSize || len(credential.PublicKey) != ed25519.PublicKeySize {
+		return nil, errors.New("invalid Host LAN credential")
+	}
+	derived := ed25519.NewKeyFromSeed(credential.Seed).Public().(ed25519.PublicKey)
+	if !bytes.Equal(derived, credential.PublicKey) {
+		return nil, errors.New("Host LAN credential key mismatch")
+	}
+	return &credential, nil
 }
 
 // save persists the credential (including the stable leaf, ticket 04) to

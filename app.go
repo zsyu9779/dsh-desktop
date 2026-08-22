@@ -10,11 +10,12 @@ import (
 
 // App is the root Wails application. It owns the DeepSeek Harness process.
 type App struct {
-	ctx     context.Context
-	dsh     *dshManager
-	remote  *remoteManager
-	notify  *notifyManager
-	account *accountManager
+	ctx         context.Context
+	dsh         *dshManager
+	remote      *remoteManager
+	notify      *notifyManager
+	account     *accountManager
+	remoteSetup *remoteSetupManager
 }
 
 // NewApp creates a new App instance.
@@ -24,6 +25,8 @@ func NewApp() *App {
 	a.remote = newRemoteManager(a)
 	a.notify = newNotifyManager(a)
 	baseURL := accountServerURL()
+	accountServer := newHTTPAccountServer(baseURL)
+	secrets := keyringAccountSecretStore{}
 	a.account = newAccountManager(
 		newBrowserAccountAuthorizer(baseURL, func(url string) error {
 			if a.ctx == nil {
@@ -32,9 +35,10 @@ func NewApp() *App {
 			runtime.BrowserOpenURL(a.ctx, url)
 			return nil
 		}),
-		newHTTPAccountServer(baseURL),
-		keyringAccountSecretStore{},
+		accountServer,
+		secrets,
 	)
+	a.remoteSetup = newRemoteSetupManager(a.account, newHTTPRemoteSetupServer(accountServer), secrets, time.Now, a.remote)
 	return a
 }
 
@@ -122,6 +126,39 @@ func (a *App) AccountStatus() accountStatus {
 // SignOutAccount clears the Account credential while retaining Host and LAN identities.
 func (a *App) SignOutAccount() accountStatus {
 	return a.account.signOut()
+}
+
+// StartRemoteSetup creates or returns the active single-use Pairing QR.
+func (a *App) StartRemoteSetup() (remoteSetupStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return a.remoteSetup.start(ctx)
+}
+
+// RefreshRemoteSetup checks whether a Device approved the active challenge.
+func (a *App) RefreshRemoteSetup() (remoteSetupStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return a.remoteSetup.refresh(ctx)
+}
+
+// CancelRemoteSetup invalidates the current Pairing challenge.
+func (a *App) CancelRemoteSetup() (remoteSetupStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return a.remoteSetup.cancel(ctx)
+}
+
+// RemoteSetupStatus returns the persisted Remote Pairing state.
+func (a *App) RemoteSetupStatus() remoteSetupStatus {
+	return a.remoteSetup.status()
+}
+
+// RegisterLANPairing registers an existing LAN Pairing using a Host identity proof.
+func (a *App) RegisterLANPairing(deviceID, deviceName string) (remoteSetupStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return a.remoteSetup.registerLAN(ctx, deviceID, deviceName)
 }
 
 // EnableRemote starts the authenticated LAN proxy for phone remote control.

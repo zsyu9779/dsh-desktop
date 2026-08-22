@@ -6,6 +6,38 @@ export function CheckDSHUpdate() {
   return window['go']['main']['App']['CheckDSHUpdate']();
 }
 
+export function CancelRemoteSetup() {
+  return window['go']['main']['App']['CancelRemoteSetup']();
+}
+
+export function AccountStatus() {
+  return window['go']['main']['App']['AccountStatus']();
+}
+
+export function SignInAccount() {
+  return window['go']['main']['App']['SignInAccount']();
+}
+
+export function SignOutAccount() {
+  return window['go']['main']['App']['SignOutAccount']();
+}
+
+export function RemoteSetupStatus() {
+  return window['go']['main']['App']['RemoteSetupStatus']();
+}
+
+export function RefreshRemoteSetup() {
+  return window['go']['main']['App']['RefreshRemoteSetup']();
+}
+
+export function RegisterLANPairing(arg1, arg2) {
+  return window['go']['main']['App']['RegisterLANPairing'](arg1, arg2);
+}
+
+export function StartRemoteSetup() {
+  return window['go']['main']['App']['StartRemoteSetup']();
+}
+
 export function DSHVersion() {
   return window['go']['main']['App']['DSHVersion']();
 }
