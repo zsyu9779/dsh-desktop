@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -64,7 +65,19 @@ type relayHostConnection interface {
 }
 
 type relayUpstream interface {
+	// call 转发一个 unary client-request，返回本地 dsh 的 server-response。
 	call(context.Context, string, []byte) ([]byte, error)
+	// openStream 为 stream method 打开本地 dsh 的 WebSocket/事件流。
+	openStream(context.Context, string) (relayStream, error)
+	// isStreamMethod 报告 method 是否映射到 WebSocket/事件流。
+	isStreamMethod(string) bool
+}
+
+// relayStream 是本地 dsh 的 WebSocket/事件流。dsh 的事件流只下传：
+// 上行仍走 HTTP，向事件流发送 Device 侧消息会被 1008 关闭。
+type relayStream interface {
+	receiveFrame() ([]byte, error)
+	close() error
 }
 
 type relayConnectionState string
@@ -86,18 +99,32 @@ type relayHost struct {
 	upstream    relayUpstream
 	randomBytes func(int) ([]byte, error)
 
+	// reconnectMin / reconnectMax 界定断线重连的有界退避区间。
+	reconnectMin time.Duration
+	reconnectMax time.Duration
+
 	mu      sync.Mutex
 	current relayStatus
 	cancel  context.CancelFunc
 	done    chan struct{}
 	active  relayHostConnection
+
+	// servedOnline 记录最近一次 serveOnce 是否进入过在线态，用于退避重置。
+	servedOnline atomic.Bool
 }
+
+const (
+	relayReconnectMin = 500 * time.Millisecond
+	relayReconnectMax = 30 * time.Second
+)
 
 func newRelayHost(identity relayIdentitySource, connector relayHostConnector, upstream relayUpstream) *relayHost {
 	return &relayHost{
 		identity: identity, connector: connector, upstream: upstream,
-		randomBytes: relayRandomBytes,
-		current:     relayStatus{State: relayOffline, Message: "Relay 离线"},
+		randomBytes:  relayRandomBytes,
+		reconnectMin: relayReconnectMin,
+		reconnectMax: relayReconnectMax,
+		current:      relayStatus{State: relayOffline, Message: "Relay 离线"},
 	}
 }
 
@@ -126,12 +153,24 @@ func (h *relayHost) start() {
 	h.mu.Unlock()
 	go func() {
 		defer close(done)
+		delay := h.reconnectMin
 		for {
 			_ = h.serveOnce(ctx)
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(2 * time.Second):
+			default:
+			}
+			if h.servedOnline.Load() {
+				// 成功上线后重置退避，下一次断线可快速重连。
+				delay = h.reconnectMin
+			} else {
+				delay = h.reconnectAfter(delay)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(delay):
 			}
 		}
 	}()
@@ -160,7 +199,18 @@ func (h *relayHost) stop() {
 	h.mu.Unlock()
 }
 
+// reconnectAfter 返回下一次重连等待时长：指数退避且有上界。
+func (h *relayHost) reconnectAfter(current time.Duration) time.Duration {
+	next := current * 2
+	if next < current || next > h.reconnectMax {
+		return h.reconnectMax
+	}
+	return next
+}
+
 func (h *relayHost) serveOnce(ctx context.Context) error {
+	// 记录本次 serveOnce 是否进入在线态；start() 据此决定退避重置还是增长。
+	h.servedOnline.Store(false)
 	h.setStatus(relayConnecting, "正在连接 Relay")
 	identity, err := h.identity.relayIdentity()
 	if err != nil {
@@ -197,41 +247,12 @@ func (h *relayHost) serveOnce(ctx context.Context) error {
 		h.mu.Unlock()
 	}()
 	h.setStatus(relayOnline, "Relay 在线")
+	h.servedOnline.Store(true)
 	defer h.setStatus(relayOffline, "Relay 离线")
 
-	channels := make(map[string]*relayHostChannel)
-	for {
-		event, err := connection.receiveEvent()
-		if err != nil {
-			return err
-		}
-		switch event.Type {
-		case relayChannelOpened:
-			if event.ChannelID != "" {
-				channels[event.ChannelID] = &relayHostChannel{id: event.ChannelID}
-			}
-		case relayChannelClosed:
-			delete(channels, event.ChannelID)
-		case relayCiphertext:
-			channel := channels[event.ChannelID]
-			if channel == nil || len(event.Ciphertext) == 0 {
-				continue
-			}
-			response, ok := h.handleCiphertext(ctx, channel, event.Ciphertext)
-			if !ok {
-				// 空密文会被 Relay 的有界帧校验器拒绝，仅关闭这一个 opaque channel，
-				// 并即时通知 Device，不暴露任何业务标识。
-				if err := connection.sendFrame(relayFrame{ChannelID: channel.id}); err != nil {
-					return err
-				}
-				delete(channels, event.ChannelID)
-				continue
-			}
-			if err := connection.sendFrame(relayFrame{ChannelID: channel.id, Ciphertext: response}); err != nil {
-				return err
-			}
-		}
-	}
+	mux := newRelayHostMux(h, connection, ctx)
+	defer mux.closeAll()
+	return mux.serve()
 }
 
 type relayHostChannel struct {
@@ -239,6 +260,14 @@ type relayHostChannel struct {
 	deviceToHostKey []byte
 	hostToDeviceKey []byte
 	ready           bool
+
+	incoming  chan []byte
+	done      chan struct{}
+	closeOnce sync.Once
+}
+
+func (c *relayHostChannel) close() {
+	c.closeOnce.Do(func() { close(c.done) })
 }
 
 type relayDeviceHello struct {
@@ -254,32 +283,6 @@ type relayHostHello struct {
 	Accepted    bool   `json:"accepted"`
 	DeviceNonce []byte `json:"deviceNonce"`
 	HostNonce   []byte `json:"hostNonce"`
-}
-
-func (h *relayHost) handleCiphertext(ctx context.Context, channel *relayHostChannel, ciphertext []byte) ([]byte, bool) {
-	if !channel.ready {
-		// Pairing 可能在 Host 长连接已在线期间完成；在 channel 握手时刷新
-		// identity 快照，使首次 Relay 尝试无需重连或重新扫码即可成功。
-		identity, err := h.identity.relayIdentity()
-		if err != nil || validateRelayIdentity(identity) != nil {
-			return nil, false
-		}
-		return h.acceptHandshake(identity, channel, ciphertext)
-	}
-	plaintext, err := relayOpen(ciphertext, channel.deviceToHostKey, relayRPCAAD(channel.id, "device-host"))
-	if err != nil {
-		return nil, false
-	}
-	method, err := relayRPCMethod(plaintext)
-	if err != nil {
-		return nil, false
-	}
-	response, err := h.upstream.call(ctx, method, plaintext)
-	if err != nil {
-		return nil, false
-	}
-	sealed, err := relaySeal(response, channel.hostToDeviceKey, relayRPCAAD(channel.id, "host-device"))
-	return sealed, err == nil
 }
 
 func (h *relayHost) acceptHandshake(identity relayHostIdentity, channel *relayHostChannel, ciphertext []byte) ([]byte, bool) {

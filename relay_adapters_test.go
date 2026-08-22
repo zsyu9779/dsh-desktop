@@ -170,4 +170,51 @@ func TestPairingRegistrySuppliesOnlyX25519DeviceIdentitiesToRelay(t *testing.T) 
 	}
 }
 
+func TestDSHRelayUpstreamRoutesStreamMethodsToEventWebSocket(t *testing.T) {
+	var gotPath string
+	upgrader := websocket.Upgrader{}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		gotPath = request.URL.Path
+		connection, err := upgrader.Upgrade(writer, request, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer connection.Close()
+		_ = connection.WriteMessage(websocket.TextMessage, []byte(`{"type":"server-request","rpcId":"e1","method":"session/event"}`))
+	}))
+	defer server.Close()
+
+	upstream := newDSHRelayUpstream(func() string { return server.URL })
+	if !upstream.isStreamMethod(relayStreamMethodMux) || !upstream.isStreamMethod(relayStreamMethodHost) {
+		t.Fatal("events.mux / events.host should be stream methods")
+	}
+	if upstream.isStreamMethod("session.list") {
+		t.Fatal("session.list should not be a stream method")
+	}
+
+	stream, err := upstream.openStream(context.Background(), relayStreamMethodMux)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.close()
+	frame, err := stream.receiveFrame()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(frame) != `{"type":"server-request","rpcId":"e1","method":"session/event"}` {
+		t.Fatalf("frame = %s", frame)
+	}
+	if gotPath != "/api/"+relayStreamMethodMux {
+		t.Fatalf("path = %q, want /api/events.mux", gotPath)
+	}
+}
+
+func TestDSHRelayUpstreamRejectsNonStreamMethodForOpenStream(t *testing.T) {
+	upstream := newDSHRelayUpstream(func() string { return "http://127.0.0.1:1" })
+	if _, err := upstream.openStream(context.Background(), "session.list"); err == nil {
+		t.Fatal("openStream accepted a unary method")
+	}
+}
+
 func timeNowForRelayTest() time.Time { return time.Unix(0, 0) }

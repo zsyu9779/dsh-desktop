@@ -332,7 +332,11 @@ func (u *recordingRelayUpstream) call(_ context.Context, method string, request 
 	u.request = append([]byte(nil), request...)
 	return append([]byte(nil), u.response...), nil
 }
-func (u *recordingRelayUpstream) calls() int { u.mu.Lock(); defer u.mu.Unlock(); return u.count }
+func (u *recordingRelayUpstream) openStream(context.Context, string) (relayStream, error) {
+	return nil, errors.New("unexpected stream open")
+}
+func (u *recordingRelayUpstream) isStreamMethod(string) bool { return false }
+func (u *recordingRelayUpstream) calls() int                 { u.mu.Lock(); defer u.mu.Unlock(); return u.count }
 
 func waitForRelayState(t *testing.T, host *relayHost, want relayConnectionState) {
 	t.Helper()

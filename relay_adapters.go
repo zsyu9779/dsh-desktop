@@ -124,4 +124,51 @@ func (u *dshRelayUpstream) call(ctx context.Context, method string, body []byte)
 	return data, nil
 }
 
+const (
+	// relayStreamMethodMux 是 dsh 的 Session 事件流下传通道 method。
+	relayStreamMethodMux = "events.mux"
+	// relayStreamMethodHost 是 dsh 的 Host 事件流下传通道 method。
+	relayStreamMethodHost = "events.host"
+)
+
+// isStreamMethod 报告 method 是否映射到本地 dsh 的事件流 WebSocket 下传通道。
+// dsh 只暴露 events.mux（Session 事件）与 events.host（Host 事件）两个下传流。
+func (u *dshRelayUpstream) isStreamMethod(method string) bool {
+	return method == relayStreamMethodMux || method == relayStreamMethodHost
+}
+
+// openStream 打开本地 dsh 的 WebSocket/事件流。method 选择目标下传通道，
+// 不上行给 dsh（dsh 事件流禁止 Device 侧消息）。
+func (u *dshRelayUpstream) openStream(ctx context.Context, method string) (relayStream, error) {
+	if !u.isStreamMethod(method) {
+		return nil, fmt.Errorf("method %q 不是本地 dsh 事件流", method)
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(u.url()), "/")
+	if baseURL == "" {
+		return nil, errors.New("本地 dsh 尚未就绪")
+	}
+	wsURL, err := wsURLFor(baseURL, "/api/"+url.PathEscape(method))
+	if err != nil {
+		return nil, err
+	}
+	connection, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	connection.SetReadLimit(relayHostReadLimit)
+	return &dshRelayStream{connection: connection}, nil
+}
+
+// dshRelayStream 是本地 dsh 事件流的下传句柄。
+type dshRelayStream struct {
+	connection *websocket.Conn
+}
+
+func (s *dshRelayStream) receiveFrame() ([]byte, error) {
+	_, data, err := s.connection.ReadMessage()
+	return data, err
+}
+
+func (s *dshRelayStream) close() error { return s.connection.Close() }
+
 func relayServerURL() string { return strings.TrimSpace(os.Getenv("DSH_RELAY_URL")) }
