@@ -16,6 +16,7 @@ type App struct {
 	notify      *notifyManager
 	account     *accountManager
 	remoteSetup *remoteSetupManager
+	relay       *relayHost
 }
 
 // NewApp creates a new App instance.
@@ -39,6 +40,11 @@ func NewApp() *App {
 		secrets,
 	)
 	a.remoteSetup = newRemoteSetupManager(a.account, newHTTPRemoteSetupServer(accountServer), secrets, time.Now, a.remote)
+	a.relay = newRelayHost(
+		accountRelayIdentitySource{account: a.account, pairings: a.remoteSetup},
+		newWebsocketRelayHostConnector(relayServerURL()),
+		newDSHRelayUpstream(func() string { return a.dsh.current().URL }),
+	)
 	return a
 }
 
@@ -56,6 +62,9 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.dsh.start()
 
+	// 维持出站 Relay 连接：已登录 Account 会立即上线，否则保持离线并周期重试。
+	a.relay.start()
+
 	// Background update check: query the npm registry for a newer DSH release
 	// and push the result to the splash screen without blocking startup.
 	go func() {
@@ -72,6 +81,7 @@ func (a *App) startup(ctx context.Context) {
 // shutdown is called when the app is about to exit.
 func (a *App) shutdown(ctx context.Context) {
 	a.remote.disable()
+	a.relay.stop()
 	a.notify.stop()
 	a.dsh.stop()
 }
@@ -123,8 +133,15 @@ func (a *App) AccountStatus() accountStatus {
 	return a.account.currentStatus()
 }
 
+// RelayStatus returns the current outbound Relay connection state.
+func (a *App) RelayStatus() relayStatus {
+	return a.relay.status()
+}
+
 // SignOutAccount clears the Account credential while retaining Host and LAN identities.
 func (a *App) SignOutAccount() accountStatus {
+	// 先断开 Relay，再清除 credential：避免退出后仍有出站连接持有已失效的 token。
+	a.relay.stop()
 	return a.account.signOut()
 }
 

@@ -298,6 +298,26 @@ func (m *remoteSetupManager) deviceListLocked() []pairedDevice {
 	return list
 }
 
+// relayPairings 返回可经 Relay 复用的 Pairing 快照，供 Host Relay 握手派生密钥。
+// 只保留携带 X25519 Device 身份公钥的 Pairing；纯 LAN 时代登记的 Pairing 没有
+// identity key（DeviceIdentityPublicKey 为空），无法做 E2E，会被过滤。
+func (m *remoteSetupManager) relayPairings() []relayPairing {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	pairings := make([]relayPairing, 0, len(m.devices))
+	for _, device := range m.devices {
+		if device.PairingID == "" || device.DeviceID == "" || len(device.DeviceIdentityPublicKey) != 32 {
+			continue
+		}
+		pairings = append(pairings, relayPairing{
+			PairingID:       device.PairingID,
+			DeviceID:        device.DeviceID,
+			DevicePublicKey: append([]byte(nil), device.DeviceIdentityPublicKey...),
+		})
+	}
+	return pairings
+}
+
 func (m *remoteSetupManager) restoreDevices() {
 	encoded, err := m.secrets.get(remotePairingsSecret)
 	if err != nil {
