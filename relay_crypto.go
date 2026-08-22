@@ -17,13 +17,19 @@ const relayV1 = "dsh-relay-v1"
 
 var errRelayCiphertext = errors.New("Relay ciphertext authentication failed")
 
+// appendLengthPrefixedField 追加一个长度前缀字段（4 字节大端长度 + 原始字节）。
+// relay-v1 握手上下文与 notification-v1 envelope 上下文共用此编码。
+func appendLengthPrefixedField(context []byte, field []byte) []byte {
+	var size [4]byte
+	binary.BigEndian.PutUint32(size[:], uint32(len(field)))
+	context = append(context, size[:]...)
+	return append(context, field...)
+}
+
 func relayHandshakeContext(pairingID, hostID, deviceID string, devicePublicKey, hostPublicKey []byte) []byte {
 	context := append([]byte(nil), []byte(relayV1+"\x00")...)
 	for _, field := range [][]byte{[]byte(pairingID), []byte(hostID), []byte(deviceID), devicePublicKey, hostPublicKey} {
-		var size [4]byte
-		binary.BigEndian.PutUint32(size[:], uint32(len(field)))
-		context = append(context, size[:]...)
-		context = append(context, field...)
+		context = appendLengthPrefixedField(context, field)
 	}
 	return context
 }

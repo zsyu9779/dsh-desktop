@@ -43,11 +43,15 @@ func NewApp() *App {
 		secrets,
 	)
 	a.remoteSetup = newRemoteSetupManager(a.account, newHTTPRemoteSetupServer(accountServer), secrets, time.Now, a.remote)
+	relayIdentity := accountRelayIdentitySource{account: a.account, pairings: a.remoteSetup}
 	a.relay = newRelayHost(
-		accountRelayIdentitySource{account: a.account, pairings: a.remoteSetup},
+		relayIdentity,
 		newWebsocketRelayHostConnector(relayServerURL()),
 		newDSHRelayUpstream(func() string { return a.dsh.current().URL }),
 	)
+	// 通知桥复用 Host Relay 身份：去重后的 Notification 派生为面向每个目标 Device
+	// 的加密 envelope（投递由 dsh-server 侧 ticket 21 与跨仓 harness ticket 24 负责）。
+	a.notify.bridge = &notificationBridge{identity: relayIdentity}
 	a.relay.onStatus = func(s relayStatus) {
 		a.emit("relay", s)
 	}

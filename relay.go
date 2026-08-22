@@ -38,6 +38,12 @@ type relayPairing struct {
 	Name            string
 }
 
+// valid 报告 Pairing 是否携带足以派生 E2E 密钥的身份（PairingID、DeviceID 与
+// 32 字节 X25519 Device 公钥）。Relay 握手与 Notification fan-out 共用此判定。
+func (p relayPairing) valid() bool {
+	return p.PairingID != "" && p.DeviceID != "" && len(p.DevicePublicKey) == 32
+}
+
 type relayHostIdentity struct {
 	AccountID   string
 	AccessToken string
@@ -369,7 +375,7 @@ func validateRelayIdentity(identity relayHostIdentity) error {
 		return errors.New("incomplete Host Relay identity")
 	}
 	for _, pairing := range identity.Pairings {
-		if pairing.PairingID == "" || pairing.DeviceID == "" || len(pairing.DevicePublicKey) != 32 {
+		if !pairing.valid() {
 			return fmt.Errorf("invalid Pairing %q", pairing.PairingID)
 		}
 	}

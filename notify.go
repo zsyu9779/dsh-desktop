@@ -188,6 +188,12 @@ type notifyManager struct {
 	// sink is an injectable channel used by tests; when nil, notifications are
 	// emitted to the frontend via Wails.
 	sink chan Notification
+
+	// bridge 派生面向每个目标 Device 的加密 Notification envelope；nil 时仅前端通知。
+	bridge *notificationBridge
+
+	// fanOutSink 接收派生的 fan-out（测试注入点）；nil 时静默丢弃，投递见后续 ticket。
+	fanOutSink chan notificationFanOut
 }
 
 func newNotifyManager(app *App) *notifyManager {
@@ -290,7 +296,20 @@ func (n *notifyManager) emit(notif Notification) {
 	}
 	n.seen[notif.DedupeKey] = struct{}{}
 	sink := n.sink
+	bridge := n.bridge
+	fanOutSink := n.fanOutSink
 	n.mu.Unlock()
+
+	// 去重门控通过后，把 Notification 派生为面向每个目标 Device 的加密 envelope。
+	// 派生失败（如 Host 未登录 Account、无有效 Pairing）不影响前端通知。
+	if bridge != nil {
+		if fanOut, err := bridge.fanOut(notif); err == nil && fanOutSink != nil {
+			select {
+			case fanOutSink <- fanOut:
+			default:
+			}
+		}
+	}
 
 	if sink != nil {
 		select {
