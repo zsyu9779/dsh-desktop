@@ -2,16 +2,19 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App is the root Wails application. It owns the DeepSeek Harness process.
 type App struct {
-	ctx    context.Context
-	dsh    *dshManager
-	remote *remoteManager
-	notify *notifyManager
+	ctx     context.Context
+	dsh     *dshManager
+	remote  *remoteManager
+	notify  *notifyManager
+	account *accountManager
 }
 
 // NewApp creates a new App instance.
@@ -20,6 +23,18 @@ func NewApp() *App {
 	a.dsh = newDSHManager(a)
 	a.remote = newRemoteManager(a)
 	a.notify = newNotifyManager(a)
+	baseURL := accountServerURL()
+	a.account = newAccountManager(
+		newBrowserAccountAuthorizer(baseURL, func(url string) error {
+			if a.ctx == nil {
+				return fmt.Errorf("Host 尚未启动")
+			}
+			runtime.BrowserOpenURL(a.ctx, url)
+			return nil
+		}),
+		newHTTPAccountServer(baseURL),
+		keyringAccountSecretStore{},
+	)
 	return a
 }
 
@@ -90,6 +105,23 @@ func (a *App) OpenNodeJS() {
 // Logs returns recent DeepSeek Harness log lines.
 func (a *App) Logs() string {
 	return a.dsh.logsString()
+}
+
+// SignInAccount opens the system browser and completes Host Account sign-in.
+func (a *App) SignInAccount() accountStatus {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	return a.account.signIn(ctx)
+}
+
+// AccountStatus returns the current Host Account state.
+func (a *App) AccountStatus() accountStatus {
+	return a.account.currentStatus()
+}
+
+// SignOutAccount clears the Account credential while retaining Host and LAN identities.
+func (a *App) SignOutAccount() accountStatus {
+	return a.account.signOut()
 }
 
 // EnableRemote starts the authenticated LAN proxy for phone remote control.
