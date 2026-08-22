@@ -341,9 +341,12 @@ type fakeAccountServer struct {
 	credential         accountCredential
 	authenticateErr    error
 	registerErr        error
+	migrateErr         error
 	authenticatedToken string
 	registration       hostAccountRegistration
 	registrationCount  int
+	migration          hostAccountMigration
+	migrateCount       int
 }
 
 func (f *fakeAccountServer) authenticate(_ context.Context, identityToken string) (accountCredential, error) {
@@ -355,6 +358,12 @@ func (f *fakeAccountServer) registerHost(_ context.Context, _ string, registrati
 	f.registration = registration
 	f.registrationCount++
 	return f.registerErr
+}
+
+func (f *fakeAccountServer) migrateHost(_ context.Context, _ string, migration hostAccountMigration) error {
+	f.migration = migration
+	f.migrateCount++
+	return f.migrateErr
 }
 
 type memorySecretStore struct {

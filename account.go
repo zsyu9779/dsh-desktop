@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -18,6 +19,10 @@ import (
 const (
 	accountIdentitySecret   = "host-account-identity"
 	accountCredentialSecret = "host-account-credential"
+
+	identityKeyTypeX25519  = "x25519"
+	identityKeyTypeEd25519 = "ed25519"
+	x25519PrivateKeySize   = 32
 )
 
 var (
@@ -25,6 +30,7 @@ var (
 	errAccountAuthorizationCanceled = errors.New("Account authorization canceled")
 	errAccountAuthorizationExpired  = errors.New("Account authorization expired")
 	errAccountRejected              = errors.New("Account request rejected")
+	errInvalidHostIdentity          = errors.New("Host identity 格式无效")
 )
 
 type accountState string
@@ -59,6 +65,15 @@ type hostAccountRegistration struct {
 	IdentityPublicKey string `json:"identityPublicKey"`
 }
 
+// hostAccountMigration 描述一次 Host endpoint identity key 迁移：用旧 key 证明当前
+// key，再把 endpoint 的 identity public key 替换为新的 X25519 key。endpoint ID
+// （HostID）保持不变，所以既有 Pairing 无需重新扫码。
+type hostAccountMigration struct {
+	HostID               string `json:"hostID"`
+	OldIdentityPublicKey string `json:"oldIdentityPublicKey"`
+	NewIdentityPublicKey string `json:"newIdentityPublicKey"`
+}
+
 type accountAuthorizer interface {
 	authorize(context.Context) (string, error)
 }
@@ -66,6 +81,7 @@ type accountAuthorizer interface {
 type accountServer interface {
 	authenticate(context.Context, string) (accountCredential, error)
 	registerHost(context.Context, string, hostAccountRegistration) error
+	migrateHost(context.Context, string, hostAccountMigration) error
 }
 
 type accountSecretStore interface {
@@ -75,8 +91,10 @@ type accountSecretStore interface {
 }
 
 type hostAccountIdentity struct {
+	KeyType            string          `json:"keyType,omitempty"`
 	HostID             string          `json:"hostID"`
 	PrivateKey         string          `json:"privateKey"`
+	LegacyPrivateKey   string          `json:"legacyPrivateKey,omitempty"`
 	RegisteredAccounts map[string]bool `json:"registeredAccounts"`
 }
 
@@ -149,6 +167,10 @@ func (m *accountManager) signIn(ctx context.Context) accountStatus {
 	identity, err := m.loadOrCreateIdentity()
 	if err != nil {
 		return m.fail(fmt.Sprintf("无法使用 Host 身份：%v", err))
+	}
+	identity, err = m.migrateLegacyIdentity(ctx, credential, identity)
+	if err != nil {
+		return m.failFor(err, "Host 身份迁移")
 	}
 	if !identity.RegisteredAccounts[credential.AccountID] {
 		registration, err := identity.registration()
@@ -249,20 +271,39 @@ func (m *accountManager) loadCredential() (accountCredential, error) {
 func (m *accountManager) loadOrCreateIdentity() (hostAccountIdentity, error) {
 	identity, err := m.loadIdentity()
 	if err == nil {
-		return identity, nil
+		if identity.isX25519() || identity.isEd25519() {
+			return identity, nil
+		}
+		return hostAccountIdentity{}, errInvalidHostIdentity
 	}
 	if !errors.Is(err, errAccountSecretNotFound) {
 		return hostAccountIdentity{}, err
 	}
+	return m.createX25519Identity()
+}
 
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+// newX25519IdentityKey 生成 X25519 key，返回 base64 编码的 private key 与原始
+// public key 字节。
+func newX25519IdentityKey() (privateKey string, publicKey []byte, err error) {
+	key, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		return "", nil, err
+	}
+	return base64.RawStdEncoding.EncodeToString(key.Bytes()), key.PublicKey().Bytes(), nil
+}
+
+// createX25519Identity 生成并持久化新的 X25519 key-agreement identity。HostID 由
+// X25519 public key 的 SHA-256 派生，private key 仅以 base64 持久化到 secure store。
+func (m *accountManager) createX25519Identity() (hostAccountIdentity, error) {
+	privateKey, publicKey, err := newX25519IdentityKey()
 	if err != nil {
 		return hostAccountIdentity{}, err
 	}
 	digest := sha256.Sum256(publicKey)
-	identity = hostAccountIdentity{
+	identity := hostAccountIdentity{
+		KeyType:            identityKeyTypeX25519,
 		HostID:             hex.EncodeToString(digest[:]),
-		PrivateKey:         base64.RawStdEncoding.EncodeToString(privateKey),
+		PrivateKey:         privateKey,
 		RegisteredAccounts: make(map[string]bool),
 	}
 	if err := m.saveIdentity(identity); err != nil {
@@ -271,12 +312,128 @@ func (m *accountManager) loadOrCreateIdentity() (hostAccountIdentity, error) {
 	return identity, nil
 }
 
-func (i hostAccountIdentity) registration() (hostAccountRegistration, error) {
-	privateKey, err := base64.RawStdEncoding.DecodeString(i.PrivateKey)
-	if err != nil || len(privateKey) != ed25519.PrivateKeySize {
-		return hostAccountRegistration{}, fmt.Errorf("invalid identity private key")
+// migrateLegacyIdentity 把旧 Ed25519 identity 迁移为 X25519 key-agreement identity。
+// 迁移保留原 Host ID；server 迁移确认前，旧 Ed25519 key 保留在 LegacyPrivateKey，
+// X25519 key 也会先持久化，使失败重试复用同一 key、不产生新 Host 或要求重新扫码。
+func (m *accountManager) migrateLegacyIdentity(ctx context.Context, credential accountCredential, identity hostAccountIdentity) (hostAccountIdentity, error) {
+	if identity.isX25519() && identity.LegacyPrivateKey == "" {
+		return identity, nil
 	}
-	publicKey := ed25519.PrivateKey(privateKey).Public().(ed25519.PublicKey)
+	migrated, err := identity.asX25519()
+	if err != nil {
+		return hostAccountIdentity{}, err
+	}
+	if migrated.RegisteredAccounts[credential.AccountID] {
+		oldKey, err := migrated.ed25519PublicKey()
+		if err != nil {
+			return hostAccountIdentity{}, err
+		}
+		newKey, err := migrated.x25519PublicKey()
+		if err != nil {
+			return hostAccountIdentity{}, err
+		}
+		// 迁移前先持久化 X25519 key（保留旧 Ed25519），确保重试复用同一 key。
+		if err := m.saveIdentity(migrated); err != nil {
+			return hostAccountIdentity{}, err
+		}
+		if err := m.server.migrateHost(ctx, credential.AccessToken, hostAccountMigration{
+			HostID:               migrated.HostID,
+			OldIdentityPublicKey: base64.RawStdEncoding.EncodeToString(oldKey),
+			NewIdentityPublicKey: base64.RawStdEncoding.EncodeToString(newKey),
+		}); err != nil {
+			return hostAccountIdentity{}, err
+		}
+	}
+	migrated.LegacyPrivateKey = ""
+	if err := m.saveIdentity(migrated); err != nil {
+		return hostAccountIdentity{}, err
+	}
+	return migrated, nil
+}
+
+// isX25519 判断 identity 是否为规范的 X25519 key-agreement identity。
+func (i hostAccountIdentity) isX25519() bool {
+	if i.KeyType != identityKeyTypeX25519 || i.HostID == "" {
+		return false
+	}
+	key, err := base64.RawStdEncoding.DecodeString(i.PrivateKey)
+	return err == nil && len(key) == x25519PrivateKeySize
+}
+
+// isEd25519 判断 identity 是否为旧版 Ed25519 identity（KeyType 缺省即旧格式）。
+func (i hostAccountIdentity) isEd25519() bool {
+	if i.KeyType != "" && i.KeyType != identityKeyTypeEd25519 {
+		return false
+	}
+	key, err := base64.RawStdEncoding.DecodeString(i.PrivateKey)
+	return err == nil && len(key) == ed25519.PrivateKeySize
+}
+
+// x25519PrivateKey 从 secure store 中的 identity 派生 X25519 private key 供 Relay
+// 握手使用；private key 绝不进入日志、QR 或 server。
+func (i hostAccountIdentity) x25519PrivateKey() ([]byte, error) {
+	if !i.isX25519() {
+		return nil, errors.New("Host identity 尚未迁移为 X25519")
+	}
+	return base64.RawStdEncoding.DecodeString(i.PrivateKey)
+}
+
+func (i hostAccountIdentity) x25519PublicKey() ([]byte, error) {
+	privateKey, err := i.x25519PrivateKey()
+	if err != nil {
+		return nil, err
+	}
+	key, err := ecdh.X25519().NewPrivateKey(privateKey)
+	if err != nil {
+		return nil, err
+	}
+	return key.PublicKey().Bytes(), nil
+}
+
+// ed25519PublicKey 返回旧 Ed25519 public key（迁移用 old key）：旧格式取自
+// PrivateKey，迁移中的 X25519 形态取自 LegacyPrivateKey。
+func (i hostAccountIdentity) ed25519PublicKey() ([]byte, error) {
+	encoded := i.PrivateKey
+	if i.isX25519() {
+		encoded = i.LegacyPrivateKey
+	}
+	if encoded == "" {
+		return nil, errors.New("Host identity 缺少旧 Ed25519 key")
+	}
+	privateKey, err := base64.RawStdEncoding.DecodeString(encoded)
+	if err != nil || len(privateKey) != ed25519.PrivateKeySize {
+		return nil, errors.New("Host identity 的 Ed25519 key 无效")
+	}
+	return ed25519.PrivateKey(privateKey).Public().(ed25519.PublicKey), nil
+}
+
+// asX25519 基于现有 identity 生成 X25519 形态并保留原 Host ID；旧 Ed25519 key
+// 暂存于 LegacyPrivateKey 直到 server 迁移确认。
+func (i hostAccountIdentity) asX25519() (hostAccountIdentity, error) {
+	if i.isX25519() {
+		return i, nil
+	}
+	if !i.isEd25519() {
+		return hostAccountIdentity{}, errInvalidHostIdentity
+	}
+	privateKey, _, err := newX25519IdentityKey()
+	if err != nil {
+		return hostAccountIdentity{}, err
+	}
+	return hostAccountIdentity{
+		KeyType:            identityKeyTypeX25519,
+		HostID:             i.HostID,
+		PrivateKey:         privateKey,
+		LegacyPrivateKey:   i.PrivateKey,
+		RegisteredAccounts: i.RegisteredAccounts,
+	}, nil
+}
+
+func (i hostAccountIdentity) registration() (hostAccountRegistration, error) {
+	publicKey, err := i.x25519PublicKey()
+	if err != nil {
+		return hostAccountRegistration{}, errors.New("invalid identity private key")
+	}
 	return hostAccountRegistration{
 		HostID:            i.HostID,
 		IdentityPublicKey: base64.RawStdEncoding.EncodeToString(publicKey),

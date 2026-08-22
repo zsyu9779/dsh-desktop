@@ -36,10 +36,11 @@ type remoteSetupChallenge struct {
 }
 
 type pairedDevice struct {
-	PairingID string    `json:"pairingID"`
-	DeviceID  string    `json:"deviceID"`
-	Name      string    `json:"name"`
-	PairedAt  time.Time `json:"pairedAt,omitempty"`
+	PairingID               string    `json:"pairingID"`
+	DeviceID                string    `json:"deviceID"`
+	Name                    string    `json:"name"`
+	DeviceIdentityPublicKey []byte    `json:"deviceIdentityPublicKey,omitempty"`
+	PairedAt                time.Time `json:"pairedAt,omitempty"`
 }
 
 type remoteSetupResult struct {

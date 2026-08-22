@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -103,6 +104,36 @@ func TestOwnerCanStartAndCompleteRemoteSetup(t *testing.T) {
 	got := restarted.status()
 	if len(got.Devices) != 1 || got.Devices[0].DeviceID != "device-1" || got.State != remoteSetupCompleted {
 		t.Fatalf("restart status = %+v, want persisted Device without repeated setup", got)
+	}
+}
+
+func TestRemoteSetupCapturesDeviceX25519PublicKey(t *testing.T) {
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	account, store := signedInAccountManager(t)
+	server := &fakeRemoteSetupServer{challenge: remoteSetupChallenge{ID: "challenge-1", Token: "single-use", ExpiresAt: now.Add(5 * time.Minute)}}
+	manager := newRemoteSetupManager(account, server, store, func() time.Time { return now })
+
+	if _, err := manager.start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	deviceKey := make([]byte, 32)
+	for i := range deviceKey {
+		deviceKey[i] = byte(i + 1)
+	}
+	server.result = remoteSetupResult{State: remoteSetupCompleted, Pairing: pairedDevice{PairingID: "pairing-1", DeviceID: "device-1", Name: "iPhone", DeviceIdentityPublicKey: deviceKey}}
+	completed, err := manager.refresh(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(completed.Devices) != 1 || !bytes.Equal(completed.Devices[0].DeviceIdentityPublicKey, deviceKey) {
+		t.Fatalf("captured Device X25519 public key = %x, want %x", completed.Devices[0].DeviceIdentityPublicKey, deviceKey)
+	}
+
+	// 重启复用：新 Pairing 的 Device public key 持久化后立即可供 Relay 握手。
+	restarted := newRemoteSetupManager(account, server, store, func() time.Time { return now })
+	got := restarted.status()
+	if len(got.Devices) != 1 || !bytes.Equal(got.Devices[0].DeviceIdentityPublicKey, deviceKey) {
+		t.Fatalf("restored Device X25519 public key = %x, want %x", got.Devices[0].DeviceIdentityPublicKey, deviceKey)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -62,6 +63,10 @@ func (s *httpAccountServer) authenticate(ctx context.Context, identityToken stri
 
 func (s *httpAccountServer) registerHost(ctx context.Context, accessToken string, registration hostAccountRegistration) error {
 	return s.request(ctx, http.MethodPost, "/v1/account/hosts", accessToken, registration, nil)
+}
+
+func (s *httpAccountServer) migrateHost(ctx context.Context, accessToken string, migration hostAccountMigration) error {
+	return s.request(ctx, http.MethodPost, "/v1/account/hosts/"+url.PathEscape(migration.HostID)+"/identity", accessToken, migration, nil)
 }
 
 func (s *httpAccountServer) request(ctx context.Context, method, path, accessToken string, body, result any) error {
