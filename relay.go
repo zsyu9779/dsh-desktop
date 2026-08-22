@@ -123,6 +123,8 @@ type relayHost struct {
 	onStatus func(relayStatus)
 	// onDeviceActive 在 Device 经 Relay 完成握手时回调，标记活动 Device 传输。
 	onDeviceActive func(activity deviceActivity)
+	// relayAllowed 是订阅门禁：返回 true 才允许建立 Relay 连接；nil 视为始终放行。
+	relayAllowed func() bool
 	// sleepAfter 是重连退避等待的注入点；默认 time.After，测试可注入可控时钟。
 	sleepAfter func(time.Duration) <-chan time.Time
 }
@@ -131,6 +133,9 @@ const (
 	relayReconnectMin = 500 * time.Millisecond
 	relayReconnectMax = 30 * time.Second
 )
+
+// errRelayNotEntitled 表示订阅门禁拒绝了 Relay：Relay 保持离线并明确提示公网不可用。
+var errRelayNotEntitled = errors.New("Relay 未获订阅授权")
 
 func newRelayHost(identity relayIdentitySource, connector relayHostConnector, upstream relayUpstream) *relayHost {
 	return &relayHost{
@@ -174,13 +179,16 @@ func (h *relayHost) start() {
 		defer close(done)
 		delay := h.reconnectMin
 		for {
-			_ = h.serveOnce(ctx)
+			err := h.serveOnce(ctx)
 			select {
 			case <-ctx.Done():
 				return
 			default:
 			}
-			if h.servedOnline.Load() {
+			if errors.Is(err, errRelayNotEntitled) {
+				// 门禁拒绝：保持最小间隔快速重查，订阅恢复即重连。
+				delay = h.reconnectMin
+			} else if h.servedOnline.Load() {
 				// 成功上线后重置退避，下一次断线可快速重连。
 				delay = h.reconnectMin
 			} else {
@@ -218,6 +226,17 @@ func (h *relayHost) stop() {
 	h.mu.Unlock()
 }
 
+// drop 主动关闭当前 Relay 连接，使 serveOnce 立即结束并在下一轮重查订阅门禁。
+// 订阅失效（expired/revoked/unknown）时由 App 调用，立即切断公网而非等心跳超时。
+func (h *relayHost) drop() {
+	h.mu.Lock()
+	active := h.active
+	h.mu.Unlock()
+	if active != nil {
+		_ = active.close()
+	}
+}
+
 // reconnectAfter 返回下一次重连等待时长：指数退避且有上界。
 func (h *relayHost) reconnectAfter(current time.Duration) time.Duration {
 	next := current * 2
@@ -228,6 +247,12 @@ func (h *relayHost) reconnectAfter(current time.Duration) time.Duration {
 }
 
 func (h *relayHost) serveOnce(ctx context.Context) error {
+	// 订阅门禁：未获授权（expired/revoked/unknown）时不建立 Relay 连接，
+	// 明确显示公网不可用；免费 LAN 与 Pairing 不受影响。
+	if h.relayAllowed != nil && !h.relayAllowed() {
+		h.setStatus(relayOffline, "公网不可用：订阅未生效")
+		return errRelayNotEntitled
+	}
 	// 记录本次 serveOnce 是否进入在线态；start() 据此决定退避重置还是增长。
 	h.servedOnline.Store(false)
 	h.setStatus(relayConnecting, "正在连接 Relay")

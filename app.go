@@ -18,6 +18,7 @@ type App struct {
 	remoteSetup *remoteSetupManager
 	relay       *relayHost
 	transport   *deviceTransportTracker
+	entitlement *entitlementManager
 }
 
 // NewApp creates a new App instance.
@@ -61,6 +62,17 @@ func NewApp() *App {
 	a.transport.onChange = func(list []deviceActivity) {
 		a.emit("devices", list)
 	}
+	// 订阅授权状态机：Relay 门禁输入，免费 LAN 与 Pairing 不受影响。生产
+	// entitlement stream 由 ticket 25（StoreKit JWS）接入，接入前保持 unknown，
+	// Relay 门禁因此拒绝公网。
+	a.entitlement = newEntitlementManager(nil, time.Now)
+	a.entitlement.onChange = func(s entitlementStatus) {
+		a.emit("entitlement", s)
+		if !s.RelayAllowed {
+			a.relay.drop()
+		}
+	}
+	a.relay.relayAllowed = a.entitlement.relayAllowed
 	return a
 }
 
@@ -80,6 +92,10 @@ func (a *App) startup(ctx context.Context) {
 
 	// 维持出站 Relay 连接：已登录 Account 会立即上线，否则保持离线并周期重试。
 	a.relay.start()
+	// 已登录 Account 立即订阅 entitlement stream；否则保持 unknown。
+	if a.account.currentStatus().State == accountStateSignedIn {
+		a.entitlement.start()
+	}
 
 	// Background update check: query the npm registry for a newer DSH release
 	// and push the result to the splash screen without blocking startup.
@@ -142,9 +158,15 @@ func (a *App) SignInAccount() accountStatus {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	status := a.account.signIn(ctx)
-	// 重新登录成功后恢复出站 Relay 连接（SignOutAccount 曾将其停止）。
-	if status.State == accountStateSignedIn && a.relay != nil {
-		a.relay.start()
+	// 重新登录成功后恢复出站 Relay 连接（SignOutAccount 曾将其停止），并订阅
+	// entitlement stream。
+	if status.State == accountStateSignedIn {
+		if a.entitlement != nil {
+			a.entitlement.start()
+		}
+		if a.relay != nil {
+			a.relay.start()
+		}
 	}
 	return status
 }
@@ -159,6 +181,14 @@ func (a *App) RelayStatus() relayStatus {
 	return a.relay.status()
 }
 
+// EntitlementStatus returns the Host Account subscription entitlement state.
+func (a *App) EntitlementStatus() entitlementStatus {
+	if a.entitlement == nil {
+		return entitlementStatus{State: entitlementUnknown, Message: "订阅状态未知"}
+	}
+	return a.entitlement.current()
+}
+
 // ActiveDevices 返回活动窗口内经 LAN 或 Relay 传输的 Device。
 func (a *App) ActiveDevices() []deviceActivity {
 	if a.transport == nil {
@@ -169,7 +199,11 @@ func (a *App) ActiveDevices() []deviceActivity {
 
 // SignOutAccount clears the Account credential while retaining Host and LAN identities.
 func (a *App) SignOutAccount() accountStatus {
-	// 先断开 Relay，再清除 credential：避免退出后仍有出站连接持有已失效的 token。
+	// 先退订 entitlement（回到 unknown），再断开 Relay、清除 credential：
+	// 避免退出后仍有出站连接持有已失效的 token，或残留 active 误报。
+	if a.entitlement != nil {
+		a.entitlement.stop()
+	}
 	a.relay.stop()
 	return a.account.signOut()
 }
