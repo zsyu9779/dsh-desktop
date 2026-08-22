@@ -6,11 +6,70 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestRemoteSetupQRCodeMatchesDeviceV1Contract(t *testing.T) {
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	account, store := signedInAccountManager(t)
+	server := &fakeRemoteSetupServer{challenge: remoteSetupChallenge{ID: "challenge-1", Token: "opaque-token", ExpiresAt: now.Add(5 * time.Minute)}}
+	app := &App{account: account, remoteSetup: newRemoteSetupManager(account, server, store, func() time.Time { return now })}
+
+	started, err := app.StartRemoteSetup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := started.QRPayload, "dsh://pair?v=1&challenge=opaque-token"; got != want {
+		t.Fatalf("QRPayload = %q, want %q", got, want)
+	}
+
+	tests := []struct {
+		name    string
+		payload string
+		valid   bool
+	}{
+		{name: "valid v1", payload: started.QRPayload, valid: true},
+		{name: "missing version", payload: "dsh://pair?challenge=opaque-token"},
+		{name: "duplicate version", payload: "dsh://pair?v=1&v=1&challenge=opaque-token"},
+		{name: "duplicate challenge", payload: "dsh://pair?v=1&challenge=opaque-token&challenge=second"},
+		{name: "unknown parameter", payload: "dsh://pair?v=1&challenge=opaque-token&host=attacker"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := acceptsDevicePairingV1Contract(tt.payload); got != tt.valid {
+				t.Fatalf("acceptsDevicePairingV1Contract(%q) = %v, want %v", tt.payload, got, tt.valid)
+			}
+		})
+	}
+}
+
+// acceptsDevicePairingV1Contract mirrors AccountPairingChallenge.parse in dsh-ios.
+// It is deliberately test-only: Desktop emits Pairing QR payloads but never consumes them.
+func acceptsDevicePairingV1Contract(payload string) bool {
+	parsed, err := url.Parse(payload)
+	if err != nil || parsed.Scheme != "dsh" || parsed.Host != "pair" || parsed.RawQuery == "" {
+		return false
+	}
+	values, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil || len(values) != 2 {
+		return false
+	}
+	single := func(name string) (string, bool) {
+		items, ok := values[name]
+		returnValue := ""
+		if ok && len(items) == 1 {
+			returnValue = items[0]
+		}
+		return returnValue, ok && len(items) == 1 && returnValue != ""
+	}
+	version, versionOK := single("v")
+	_, challengeOK := single("challenge")
+	return versionOK && version == "1" && challengeOK
+}
 
 func TestOwnerCanStartAndCompleteRemoteSetup(t *testing.T) {
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)

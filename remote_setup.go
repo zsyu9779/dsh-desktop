@@ -266,8 +266,7 @@ func (m *remoteSetupManager) statusLocked() remoteSetupStatus {
 	case remoteSetupPending:
 		status.ChallengeID = m.challenge.ID
 		status.ExpiresAt = m.challenge.ExpiresAt
-		values := url.Values{"challenge": {m.challenge.Token}}
-		status.QRPayload = "dsh://pair?" + values.Encode()
+		status.QRPayload = "dsh://pair?v=1&challenge=" + url.QueryEscape(m.challenge.Token)
 		png, err := qrcode.Encode(status.QRPayload, qrcode.Medium, 256)
 		if err == nil {
 			status.QR = "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
