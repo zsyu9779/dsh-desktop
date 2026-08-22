@@ -17,13 +17,16 @@ type App struct {
 	account     *accountManager
 	remoteSetup *remoteSetupManager
 	relay       *relayHost
+	transport   *deviceTransportTracker
 }
 
 // NewApp creates a new App instance.
 func NewApp() *App {
 	a := &App{}
+	a.transport = newDeviceTransportTracker(time.Now)
 	a.dsh = newDSHManager(a)
 	a.remote = newRemoteManager(a)
+	a.remote.transport = a.transport
 	a.notify = newNotifyManager(a)
 	baseURL := accountServerURL()
 	accountServer := newHTTPAccountServer(baseURL)
@@ -45,6 +48,15 @@ func NewApp() *App {
 		newWebsocketRelayHostConnector(relayServerURL()),
 		newDSHRelayUpstream(func() string { return a.dsh.current().URL }),
 	)
+	a.relay.onStatus = func(s relayStatus) {
+		a.emit("relay", s)
+	}
+	a.relay.onDeviceActive = func(activity deviceActivity) {
+		a.transport.mark(activity)
+	}
+	a.transport.onChange = func(list []deviceActivity) {
+		a.emit("devices", list)
+	}
 	return a
 }
 
@@ -125,7 +137,12 @@ func (a *App) Logs() string {
 func (a *App) SignInAccount() accountStatus {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	return a.account.signIn(ctx)
+	status := a.account.signIn(ctx)
+	// 重新登录成功后恢复出站 Relay 连接（SignOutAccount 曾将其停止）。
+	if status.State == accountStateSignedIn && a.relay != nil {
+		a.relay.start()
+	}
+	return status
 }
 
 // AccountStatus returns the current Host Account state.
@@ -136,6 +153,14 @@ func (a *App) AccountStatus() accountStatus {
 // RelayStatus returns the current outbound Relay connection state.
 func (a *App) RelayStatus() relayStatus {
 	return a.relay.status()
+}
+
+// ActiveDevices 返回活动窗口内经 LAN 或 Relay 传输的 Device。
+func (a *App) ActiveDevices() []deviceActivity {
+	if a.transport == nil {
+		return nil
+	}
+	return a.transport.activeDevices()
 }
 
 // SignOutAccount clears the Account credential while retaining Host and LAN identities.
@@ -234,11 +259,16 @@ func (a *App) UninstallPreinstalledPlugin(id string) bool {
 	return true
 }
 
-// emitRemote pushes a remote status snapshot to the frontend.
-func (a *App) emitRemote(s remoteStatus) {
+// emit 将值以指定事件名推送到前端；Host 尚未启动时静默丢弃。
+func (a *App) emit(name string, value any) {
 	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "remote", s)
+		runtime.EventsEmit(a.ctx, name, value)
 	}
+}
+
+// emitRemote 推送一个 remote 状态快照到前端。
+func (a *App) emitRemote(s remoteStatus) {
+	a.emit("remote", s)
 }
 
 // Quit exits the application.

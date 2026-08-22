@@ -24,6 +24,9 @@ type relayHostMux struct {
 	mu       sync.Mutex
 	closed   bool
 	channels map[string]*relayHostChannel
+
+	// onDeviceActive 在 channel 完成握手时回调，标记该 Device 正经 Relay 传输。
+	onDeviceActive func(activity deviceActivity)
 }
 
 func newRelayHostMux(host *relayHost, connection relayHostConnection, ctx context.Context) *relayHostMux {
@@ -34,6 +37,7 @@ func newRelayHostMux(host *relayHost, connection relayHostConnection, ctx contex
 		connection:      connection,
 		ctx:             ctx,
 		channels:        make(map[string]*relayHostChannel),
+		onDeviceActive:  host.onDeviceActive,
 	}
 }
 
@@ -158,6 +162,14 @@ func (m *relayHostMux) runChannel(channel *relayHostChannel) {
 	}
 }
 
+// markRelayActive 在握手成功或后续收到有效密文时，把该 Device 标记为经 Relay
+// 活跃并刷新活动时间戳（与 LAN 每次认证请求对称）。
+func (m *relayHostMux) markRelayActive(channel *relayHostChannel) {
+	if m.onDeviceActive != nil && channel.deviceID != "" {
+		m.onDeviceActive(deviceActivity{DeviceID: channel.deviceID, Name: channel.name, Transport: deviceTransportRelay})
+	}
+}
+
 func (m *relayHostMux) handleChannelCiphertext(channel *relayHostChannel, ciphertext []byte) bool {
 	if !channel.ready {
 		// Pairing 可能在 Host 长连接已在线期间完成；在 channel 握手时刷新
@@ -170,6 +182,7 @@ func (m *relayHostMux) handleChannelCiphertext(channel *relayHostChannel, cipher
 		if !ok {
 			return false
 		}
+		m.markRelayActive(channel)
 		return m.sendFrame(relayFrame{ChannelID: channel.id, Ciphertext: response}) == nil
 	}
 
@@ -177,6 +190,7 @@ func (m *relayHostMux) handleChannelCiphertext(channel *relayHostChannel, cipher
 	if err != nil {
 		return false
 	}
+	m.markRelayActive(channel)
 	method, err := relayRPCMethod(plaintext)
 	if err != nil {
 		return false

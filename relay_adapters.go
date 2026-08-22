@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -44,6 +45,15 @@ type websocketRelayHostConnector struct {
 
 const relayHostReadLimit = 2 << 20
 
+// Relay 心跳：Host 定期发 ping，并要求在 pongWait 内收到 pong。macOS 休眠唤醒后
+// 旧 TCP 连接会静默失效，读超时让 receiveEvent 报错并触发有界退避重连，而不是
+// 永远停在"在线"的假象上。
+const (
+	relayPingPeriod   = 20 * time.Second
+	relayPongWait     = 60 * time.Second
+	relayWriteTimeout = 10 * time.Second
+)
+
 func newWebsocketRelayHostConnector(rawURL string) *websocketRelayHostConnector {
 	return &websocketRelayHostConnector{url: strings.TrimSpace(rawURL), dialer: websocket.DefaultDialer}
 }
@@ -68,11 +78,41 @@ func (c *websocketRelayHostConnector) connect(ctx context.Context, endpoint rela
 		return nil, err
 	}
 	connection.SetReadLimit(relayHostReadLimit)
-	return &websocketRelayHostConnection{connection: connection}, nil
+	wrapped := &websocketRelayHostConnection{connection: connection, done: make(chan struct{})}
+	wrapped.startHeartbeat(relayPingPeriod, relayPongWait)
+	return wrapped, nil
 }
 
 type websocketRelayHostConnection struct {
 	connection *websocket.Conn
+	done       chan struct{}
+	once       sync.Once
+}
+
+// startHeartbeat 设置读超时与 pong 处理，并启动一个周期 ping 的 goroutine。
+// 读超时到期会让 ReadJSON 报错，从而让上层 serveOnce 结束并进入重连。
+func (c *websocketRelayHostConnection) startHeartbeat(pingPeriod, pongWait time.Duration) {
+	if pingPeriod <= 0 || pongWait <= 0 {
+		return
+	}
+	_ = c.connection.SetReadDeadline(time.Now().Add(pongWait))
+	c.connection.SetPongHandler(func(string) error {
+		return c.connection.SetReadDeadline(time.Now().Add(pongWait))
+	})
+	go func() {
+		ticker := time.NewTicker(pingPeriod)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := c.connection.WriteControl(websocket.PingMessage, nil, time.Now().Add(relayWriteTimeout)); err != nil {
+					return
+				}
+			case <-c.done:
+				return
+			}
+		}
+	}()
 }
 
 func (c *websocketRelayHostConnection) receiveEvent() (relayEvent, error) {
@@ -83,7 +123,10 @@ func (c *websocketRelayHostConnection) receiveEvent() (relayEvent, error) {
 func (c *websocketRelayHostConnection) sendFrame(frame relayFrame) error {
 	return c.connection.WriteJSON(frame)
 }
-func (c *websocketRelayHostConnection) close() error { return c.connection.Close() }
+func (c *websocketRelayHostConnection) close() error {
+	c.once.Do(func() { close(c.done) })
+	return c.connection.Close()
+}
 
 type dshRelayUpstream struct {
 	url    func() string

@@ -35,6 +35,7 @@ type relayPairing struct {
 	PairingID       string
 	DeviceID        string
 	DevicePublicKey []byte
+	Name            string
 }
 
 type relayHostIdentity struct {
@@ -111,6 +112,13 @@ type relayHost struct {
 
 	// servedOnline 记录最近一次 serveOnce 是否进入过在线态，用于退避重置。
 	servedOnline atomic.Bool
+
+	// onStatus 在 Relay 状态变化时回调（生产环境由 App 注入以推送 UI 事件）。
+	onStatus func(relayStatus)
+	// onDeviceActive 在 Device 经 Relay 完成握手时回调，标记活动 Device 传输。
+	onDeviceActive func(activity deviceActivity)
+	// sleepAfter 是重连退避等待的注入点；默认 time.After，测试可注入可控时钟。
+	sleepAfter func(time.Duration) <-chan time.Time
 }
 
 const (
@@ -124,6 +132,7 @@ func newRelayHost(identity relayIdentitySource, connector relayHostConnector, up
 		randomBytes:  relayRandomBytes,
 		reconnectMin: relayReconnectMin,
 		reconnectMax: relayReconnectMax,
+		sleepAfter:   time.After,
 		current:      relayStatus{State: relayOffline, Message: "Relay 离线"},
 	}
 }
@@ -135,9 +144,13 @@ func (h *relayHost) status() relayStatus {
 }
 
 func (h *relayHost) setStatus(state relayConnectionState, message string) {
+	status := relayStatus{State: state, Message: message}
 	h.mu.Lock()
-	h.current = relayStatus{State: state, Message: message}
+	h.current = status
 	h.mu.Unlock()
+	if h.onStatus != nil {
+		h.onStatus(status)
+	}
 }
 
 func (h *relayHost) start() {
@@ -170,7 +183,7 @@ func (h *relayHost) start() {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(delay):
+			case <-h.sleepAfter(delay):
 			}
 		}
 	}()
@@ -260,6 +273,8 @@ type relayHostChannel struct {
 	deviceToHostKey []byte
 	hostToDeviceKey []byte
 	ready           bool
+	deviceID        string
+	name            string
 
 	incoming  chan []byte
 	done      chan struct{}
@@ -320,6 +335,8 @@ func (h *relayHost) acceptHandshake(identity relayHostIdentity, channel *relayHo
 		channel.deviceToHostKey = relayDeriveKey(connectionMaterial, salt, relayV1+"/device-host")
 		channel.hostToDeviceKey = relayDeriveKey(connectionMaterial, salt, relayV1+"/host-device")
 		channel.ready = true
+		channel.deviceID = pairing.DeviceID
+		channel.name = pairing.Name
 		encoded, err := json.Marshal(relayHostHello{Version: 1, Type: "host_hello", Accepted: true, DeviceNonce: hello.DeviceNonce, HostNonce: hostNonce})
 		if err != nil {
 			return nil, false

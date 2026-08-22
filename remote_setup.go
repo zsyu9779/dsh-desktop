@@ -313,6 +313,7 @@ func (m *remoteSetupManager) relayPairings() []relayPairing {
 			PairingID:       device.PairingID,
 			DeviceID:        device.DeviceID,
 			DevicePublicKey: append([]byte(nil), device.DeviceIdentityPublicKey...),
+			Name:            device.Name,
 		})
 	}
 	return pairings

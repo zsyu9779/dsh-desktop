@@ -292,6 +292,16 @@ func (r *deviceRegistry) touch(deviceID string) {
 	}
 }
 
+// name returns the registered display name for a device, or "" if unknown.
+func (r *deviceRegistry) name(deviceID string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if d, ok := r.devices[deviceID]; ok {
+		return d.Name
+	}
+	return ""
+}
+
 // newDeviceID returns a random device identifier.
 func newDeviceID() string {
 	b := make([]byte, 16)

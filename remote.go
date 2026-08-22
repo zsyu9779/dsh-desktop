@@ -108,6 +108,7 @@ type remoteManager struct {
 	cred            *hostCredential
 	certFingerprint string
 	devices         *deviceRegistry
+	transport       *deviceTransportTracker
 	port            int
 	target          string
 	server          *http.Server
@@ -438,6 +439,9 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		devices.touch(claims.DeviceID)
+		if r.transport != nil {
+			r.transport.mark(deviceActivity{DeviceID: claims.DeviceID, Name: devices.name(claims.DeviceID), Transport: deviceTransportLAN})
+		}
 		if isPrivilegedPath(req.URL.Path) && !allowPrivileged {
 			r.logf("auth rejected: privileged method %s denied (from %s)", req.URL.Path, req.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)
