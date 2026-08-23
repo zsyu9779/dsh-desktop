@@ -388,6 +388,27 @@ function handleRelay(s) {
     text.textContent = s.message || ('Relay：' + relayLabel(s.state));
 }
 
+function entitlementLabel(state) {
+    switch (state) {
+        case 'active': return '已生效';
+        case 'grace': return '宽限期';
+        case 'expired': return '已过期';
+        case 'revoked': return '已撤销';
+        default: return '未知';
+    }
+}
+
+function handleEntitlement(s) {
+    if (!s) return;
+    const el = document.getElementById('entitlement-status');
+    el.hidden = false;
+    const dot = document.getElementById('entitlement-status-dot');
+    dot.className = 'entitlement-status-dot ent-' + (s.state || 'unknown');
+    const text = document.getElementById('entitlement-status-text');
+    const availability = s.relayAllowed ? ' · 公网可用' : ' · 公网不可用';
+    text.textContent = (s.message || ('订阅状态：' + entitlementLabel(s.state))) + availability;
+}
+
 function transportLabel(t) {
     return t === 'relay' ? 'Relay' : (t === 'lan' ? 'LAN' : (t || '—'));
 }
@@ -414,6 +435,7 @@ function handleDevices(list) {
 function refreshRelayAndDevices() {
     App.RelayStatus().then(handleRelay).catch(() => {});
     App.ActiveDevices().then(handleDevices).catch(() => {});
+    App.EntitlementStatus().then(handleEntitlement).catch(() => {});
 }
 
 function handleStatus(s) {
@@ -559,6 +581,7 @@ runtime.EventsOn('dsh-update', renderUpdate);
 runtime.EventsOn('notifications', handleNotification);
 runtime.EventsOn('relay', handleRelay);
 runtime.EventsOn('devices', handleDevices);
+runtime.EventsOn('entitlement', handleEntitlement);
 App.Status().then(handleStatus).catch((err) => console.error(err));
 App.AccountStatus().then(handleAccountStatus).catch((err) => console.error(err));
 App.DSHVersion().then((v) => { updateCurrent.textContent = v || '—'; }).catch(() => {});

@@ -487,3 +487,40 @@ body {
 .relay-status-dot.relay-offline {
     background: #8b93a7;
 }
+
+.entitlement-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.entitlement-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.entitlement-status-dot.ent-active {
+    background: #3fb950;
+}
+
+.entitlement-status-dot.ent-grace {
+    background: #ffb042;
+}
+
+.entitlement-status-dot.ent-expired {
+    background: #f85149;
+}
+
+.entitlement-status-dot.ent-revoked {
+    background: #f85149;
+}
+
+.entitlement-status-dot.ent-unknown {
+    background: #8b93a7;
+}
