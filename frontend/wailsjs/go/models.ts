@@ -20,6 +20,43 @@ export namespace main {
 	        this.retryable = source["retryable"];
 	    }
 	}
+	export class deviceActivity {
+	    deviceId: string;
+	    name: string;
+	    transport: string;
+	    // Go type: time
+	    lastActive: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new deviceActivity(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.deviceId = source["deviceId"];
+	        this.name = source["name"];
+	        this.transport = source["transport"];
+	        this.lastActive = this.convertValues(source["lastActive"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class deviceIdentity {
 	    deviceId: string;
 	    name: string;
@@ -78,10 +115,50 @@ export namespace main {
 	        this.error = source["error"];
 	    }
 	}
+	export class entitlementStatus {
+	    state: string;
+	    accountID?: string;
+	    message: string;
+	    // Go type: time
+	    expiresAt?: any;
+	    relayAllowed: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new entitlementStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.accountID = source["accountID"];
+	        this.message = source["message"];
+	        this.expiresAt = this.convertValues(source["expiresAt"], null);
+	        this.relayAllowed = source["relayAllowed"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class pairedDevice {
 	    pairingID: string;
 	    deviceID: string;
 	    name: string;
+	    deviceIdentityPublicKey?: number[];
 	    // Go type: time
 	    pairedAt?: any;
 	
@@ -94,6 +171,7 @@ export namespace main {
 	        this.pairingID = source["pairingID"];
 	        this.deviceID = source["deviceID"];
 	        this.name = source["name"];
+	        this.deviceIdentityPublicKey = source["deviceIdentityPublicKey"];
 	        this.pairedAt = this.convertValues(source["pairedAt"], null);
 	    }
 	
@@ -114,6 +192,20 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class relayStatus {
+	    state: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new relayStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.message = source["message"];
+	    }
 	}
 	export class remoteSetupStatus {
 	    state: string;

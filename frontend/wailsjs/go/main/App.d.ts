@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function AccountStatus():Promise<main.accountStatus>;
 
+export function ActiveDevices():Promise<Array<main.deviceActivity>>;
+
 export function CancelRemoteSetup():Promise<main.remoteSetupStatus>;
 
 export function CheckDSHUpdate():Promise<main.dshUpdateInfo>;
@@ -13,6 +15,8 @@ export function DSHVersion():Promise<string>;
 export function DisableRemote():Promise<void>;
 
 export function EnableRemote():Promise<main.remoteStatus>;
+
+export function EntitlementStatus():Promise<main.entitlementStatus>;
 
 export function ListDevices():Promise<Array<main.deviceIdentity>>;
 
@@ -29,6 +33,8 @@ export function RefreshRemoteSetup():Promise<main.remoteSetupStatus>;
 export function RegenerateRemoteToken():Promise<main.remoteStatus>;
 
 export function RegisterLANPairing(arg1:string,arg2:string):Promise<main.remoteSetupStatus>;
+
+export function RelayStatus():Promise<main.relayStatus>;
 
 export function RemoteSetupStatus():Promise<main.remoteSetupStatus>;
 

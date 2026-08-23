@@ -6,6 +6,10 @@ export function AccountStatus() {
   return window['go']['main']['App']['AccountStatus']();
 }
 
+export function ActiveDevices() {
+  return window['go']['main']['App']['ActiveDevices']();
+}
+
 export function CancelRemoteSetup() {
   return window['go']['main']['App']['CancelRemoteSetup']();
 }
@@ -24,6 +28,10 @@ export function DisableRemote() {
 
 export function EnableRemote() {
   return window['go']['main']['App']['EnableRemote']();
+}
+
+export function EntitlementStatus() {
+  return window['go']['main']['App']['EntitlementStatus']();
 }
 
 export function ListDevices() {
@@ -56,6 +64,10 @@ export function RegenerateRemoteToken() {
 
 export function RegisterLANPairing(arg1, arg2) {
   return window['go']['main']['App']['RegisterLANPairing'](arg1, arg2);
+}
+
+export function RelayStatus() {
+  return window['go']['main']['App']['RelayStatus']();
 }
 
 export function RemoteSetupStatus() {
