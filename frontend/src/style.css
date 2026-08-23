@@ -458,3 +458,32 @@ body {
     font-size: 12px;
     color: var(--text-muted);
 }
+
+.relay-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.relay-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.relay-status-dot.relay-online {
+    background: #3fb950;
+}
+
+.relay-status-dot.relay-connecting {
+    background: #ffb042;
+}
+
+.relay-status-dot.relay-offline {
+    background: #8b93a7;
+}

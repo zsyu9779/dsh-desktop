@@ -77,6 +77,14 @@
                     <button class="btn btn-primary" id="btn-account-remote-start" disabled>设置</button>
                 </div>
             </div>
+            <div class="relay-status" id="relay-status" hidden>
+                <span class="relay-status-dot" id="relay-status-dot"></span>
+                <span class="relay-status-text" id="relay-status-text">Relay 离线</span>
+            </div>
+            <div class="remote-devices" id="active-devices" hidden>
+                <p class="remote-devices-title">活动 Device</p>
+                <ul class="remote-device-list" id="active-device-list"></ul>
+            </div>
             <p class="remote-hint" id="account-remote-message">登录 Account 后，为每个 Device–Host 关系只需 Pairing 一次。</p>
             <div class="remote-detail" id="account-remote-setup" hidden>
                 <img class="remote-qr" id="account-remote-qr" alt="Account Remote Pairing 二维码" />

@@ -369,6 +369,53 @@ function handleNotification(n) {
     notifyEl.hidden = false;
 }
 
+function relayLabel(state) {
+    switch (state) {
+        case 'connecting': return '正在连接';
+        case 'online': return '在线';
+        case 'offline': return '离线';
+        default: return state || '离线';
+    }
+}
+
+function handleRelay(s) {
+    if (!s) return;
+    const el = document.getElementById('relay-status');
+    el.hidden = false;
+    const dot = document.getElementById('relay-status-dot');
+    dot.className = 'relay-status-dot relay-' + (s.state || 'offline');
+    const text = document.getElementById('relay-status-text');
+    text.textContent = s.message || ('Relay：' + relayLabel(s.state));
+}
+
+function transportLabel(t) {
+    return t === 'relay' ? 'Relay' : (t === 'lan' ? 'LAN' : (t || '—'));
+}
+
+function handleDevices(list) {
+    const wrap = document.getElementById('active-devices');
+    const ul = document.getElementById('active-device-list');
+    if (!list || list.length === 0) {
+        wrap.hidden = true;
+        return;
+    }
+    wrap.hidden = false;
+    ul.innerHTML = '';
+    list.forEach((d) => {
+        const li = document.createElement('li');
+        li.className = 'remote-device';
+        const name = document.createElement('span');
+        name.textContent = (d.name || 'Device') + ' · ' + transportLabel(d.transport);
+        li.appendChild(name);
+        ul.appendChild(li);
+    });
+}
+
+function refreshRelayAndDevices() {
+    App.RelayStatus().then(handleRelay).catch(() => {});
+    App.ActiveDevices().then(handleDevices).catch(() => {});
+}
+
 function handleStatus(s) {
     if (!s) return;
 
@@ -510,11 +557,15 @@ runtime.EventsOn('status', handleStatus);
 runtime.EventsOn('remote', handleRemote);
 runtime.EventsOn('dsh-update', renderUpdate);
 runtime.EventsOn('notifications', handleNotification);
+runtime.EventsOn('relay', handleRelay);
+runtime.EventsOn('devices', handleDevices);
 App.Status().then(handleStatus).catch((err) => console.error(err));
 App.AccountStatus().then(handleAccountStatus).catch((err) => console.error(err));
 App.DSHVersion().then((v) => { updateCurrent.textContent = v || '—'; }).catch(() => {});
+refreshRelayAndDevices();
+window.setInterval(refreshRelayAndDevices, 10000);
 
-window.addEventListener('focus', refreshHarnessLayer);
+window.addEventListener('focus', () => { refreshHarnessLayer(); refreshRelayAndDevices(); });
 window.addEventListener('pageshow', refreshHarnessLayer);
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') refreshHarnessLayer();
