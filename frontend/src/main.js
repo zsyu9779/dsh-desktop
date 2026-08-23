@@ -22,7 +22,8 @@ const remoteDetail = document.getElementById('remote-detail');
 const remoteQR = document.getElementById('remote-qr');
 const remoteURL = document.getElementById('remote-url');
 const remoteMeta = document.getElementById('remote-meta');
-const remoteFp = document.getElementById('remote-fp');
+const remoteHostKey = document.getElementById('remote-host-key');
+const remoteCertFp = document.getElementById('remote-cert-fp');
 const remoteAllowPrivileged = document.getElementById('remote-allow-privileged');
 const remoteDevices = document.getElementById('remote-devices');
 const remoteDeviceList = document.getElementById('remote-device-list');
@@ -265,10 +266,10 @@ function handleRemote(s) {
 
 function renderRemoteMeta(s) {
     remoteMeta.hidden = false;
-    const parts = [];
-    if (s.hostPublicKey) parts.push('Host 公钥: ' + s.hostPublicKey);
-    if (s.certFingerprint) parts.push('证书指纹: ' + s.certFingerprint);
-    remoteFp.textContent = parts.join(' · ') || '';
+    remoteHostKey.hidden = !s.hostPublicKey;
+    remoteCertFp.hidden = !s.certFingerprint;
+    remoteHostKey.textContent = s.hostPublicKey ? 'Host 公钥: ' + s.hostPublicKey : '';
+    remoteCertFp.textContent = s.certFingerprint ? '证书指纹: ' + s.certFingerprint : '';
     remoteAllowPrivileged.checked = !!s.allowPrivileged;
 }
 

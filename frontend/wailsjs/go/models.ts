@@ -1,11 +1,16 @@
 export namespace main {
+	
 	export class accountStatus {
 	    state: string;
 	    accountID?: string;
 	    hostID?: string;
 	    message: string;
 	    retryable: boolean;
-	    static createFrom(source: any = {}) { return new accountStatus(source); }
+	
+	    static createFrom(source: any = {}) {
+	        return new accountStatus(source);
+	    }
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.state = source["state"];
@@ -15,49 +20,6 @@ export namespace main {
 	        this.retryable = source["retryable"];
 	    }
 	}
-	export class pairedDevice {
-	    pairingID: string;
-	    deviceID: string;
-	    name: string;
-	    pairedAt?: any;
-
-	    static createFrom(source: any = {}) { return new pairedDevice(source); }
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pairingID = source["pairingID"];
-	        this.deviceID = source["deviceID"];
-	        this.name = source["name"];
-	        this.pairedAt = source["pairedAt"];
-	    }
-	}
-	export class remoteSetupStatus {
-	    state: string;
-	    challengeID?: string;
-	    expiresAt?: any;
-	    qrPayload?: string;
-	    qr?: string;
-	    devices: Array<pairedDevice>;
-	    message: string;
-
-	    static createFrom(source: any = {}) { return new remoteSetupStatus(source); }
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.state = source["state"];
-	        this.challengeID = source["challengeID"];
-	        this.expiresAt = source["expiresAt"];
-	        this.qrPayload = source["qrPayload"];
-	        this.qr = source["qr"];
-	        this.devices = this.convertValues(source["devices"], pairedDevice);
-	        this.message = source["message"];
-	    }
-		convertValues(a: any, classs: any): any {
-		    if (!a) return a;
-		    if (a.slice && a.map) return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    if ("object" === typeof a) return new classs(a);
-		    return a;
-		}
-	}
-	
 	export class deviceIdentity {
 	    deviceId: string;
 	    name: string;
@@ -116,6 +78,86 @@ export namespace main {
 	        this.error = source["error"];
 	    }
 	}
+	export class pairedDevice {
+	    pairingID: string;
+	    deviceID: string;
+	    name: string;
+	    // Go type: time
+	    pairedAt?: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new pairedDevice(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pairingID = source["pairingID"];
+	        this.deviceID = source["deviceID"];
+	        this.name = source["name"];
+	        this.pairedAt = this.convertValues(source["pairedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class remoteSetupStatus {
+	    state: string;
+	    challengeID?: string;
+	    // Go type: time
+	    expiresAt?: any;
+	    qrPayload?: string;
+	    qr?: string;
+	    devices: pairedDevice[];
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new remoteSetupStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.challengeID = source["challengeID"];
+	        this.expiresAt = this.convertValues(source["expiresAt"], null);
+	        this.qrPayload = source["qrPayload"];
+	        this.qr = source["qr"];
+	        this.devices = this.convertValues(source["devices"], pairedDevice);
+	        this.message = source["message"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class remoteStatus {
 	    enabled: boolean;
 	    allowPrivileged: boolean;
@@ -164,3 +206,4 @@ export namespace main {
 	}
 
 }
+
