@@ -11,10 +11,35 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      tag: ${{ steps.source.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve a release tag on main
+        id: source
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" == v* ]]
+          git check-ref-format "refs/tags/$RELEASE_TAG"
+          commit=$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}")
+          git merge-base --is-ancestor "$commit" refs/remotes/origin/main
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: source
     strategy:
       fail-fast: false
       matrix:
@@ -29,7 +54,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
+          ref: ${{ needs.source.outputs.commit }}
+          persist-credentials: false
 
       - uses: actions/setup-go@v5
         with:
@@ -69,7 +95,6 @@ jobs:
           case "${{ matrix.os }}" in
             macos-latest)
               ditto -c -k --sequesterRsrc --keepParent "build/bin/dsh-desktop.app" "dist/dsh-desktop-darwin-universal.zip"
-              hdiutil create -volname "DeepSeek Harness" -srcfolder "build/bin/dsh-desktop.app" -ov -format UDZO "dist/dsh-desktop-darwin-universal.dmg"
               ;;
             windows-latest)
               cp build/bin/*.exe dist/
@@ -87,19 +112,75 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+  sign-macos:
+    needs: [source, build]
+    runs-on: macos-latest
+    environment: macos-release
     steps:
+      # Signing code comes from the workflow revision, even when rebuilding an older tag.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Test signing and publication gates without credentials
+        run: python3 -B -m unittest discover -s scripts/tests -v
       - uses: actions/download-artifact@v4
         with:
+          name: dsh-desktop-macos-latest
+          path: unsigned
+      - name: Unpack the app
+        run: ditto -x -k unsigned/dsh-desktop-darwin-universal.zip unsigned/app
+      - name: Sign, notarize and package macOS
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_NOTARY_API_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_API_KEY_P8_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ vars.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: bash scripts/package-macos.sh unsigned/app/dsh-desktop.app dist
+      - name: Clean signing material after cancellation or failure
+        if: always()
+        shell: bash
+        run: |
+          for signing_dir in "$RUNNER_TEMP"/dsh-signing.*; do
+            [[ -d "$signing_dir" ]] || continue
+            security delete-keychain "$signing_dir/signing.keychain-db" >/dev/null 2>&1 || true
+            rm -rf "$signing_dir"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-desktop-macos-signed
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    needs: [source, build, sign-macos]
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Explicit names prevent the intermediate unsigned macOS ZIP from being published.
+      - uses: actions/download-artifact@v4
+        with:
+          name: dsh-desktop-macos-signed
           path: artifacts
-          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: dsh-desktop-windows-latest
+          path: artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: dsh-desktop-ubuntu-22.04
+          path: artifacts
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          tag_name: ${{ needs.source.outputs.tag }}
           files: artifacts/**
           generate_release_notes: true
