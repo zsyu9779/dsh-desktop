@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -57,4 +59,29 @@ func TestBuildCommandDefaultWorkspaceIsHome(t *testing.T) {
 		}
 	}
 	t.Fatalf("DSH_WORKSPACE=%s (home default) not present in child env", home)
+}
+
+func TestFindCachedDSHExecutableRequiresPinnedCompleteDlx(t *testing.T) {
+	root := t.TempDir()
+	packageDir := filepath.Join(root, "cache-key", "install-key", "node_modules", "@deepseek-ai", "dsh")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, "package.json"), []byte(`{"version":"0.1.1-rc.2"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(root, "cache-key", "install-key", "node_modules", ".bin", "dsh")
+	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := findCachedDSHExecutable([]string{root}, "0.1.1-rc.2"); got != bin {
+		t.Fatalf("findCachedDSHExecutable() = %q, want %q", got, bin)
+	}
+	if got := findCachedDSHExecutable([]string{root}, "9.9.9"); got != "" {
+		t.Fatal(fmt.Sprintf("wrong version returned %q", got))
+	}
 }

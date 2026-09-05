@@ -27,6 +27,7 @@ type relayHostMux struct {
 
 	// onDeviceActive 在 channel 完成握手时回调，标记该 Device 正经 Relay 传输。
 	onDeviceActive func(activity deviceActivity)
+	onRegistrySync func(version uint64, revokedPairingIDs []string, pairings []relayPairingSync)
 }
 
 func newRelayHostMux(host *relayHost, connection relayHostConnection, ctx context.Context) *relayHostMux {
@@ -38,6 +39,7 @@ func newRelayHostMux(host *relayHost, connection relayHostConnection, ctx contex
 		ctx:             ctx,
 		channels:        make(map[string]*relayHostChannel),
 		onDeviceActive:  host.onDeviceActive,
+		onRegistrySync:  host.onRegistrySync,
 	}
 }
 
@@ -48,6 +50,10 @@ func (m *relayHostMux) serve() error {
 			return err
 		}
 		switch event.Type {
+		case relayRegistrySynced:
+			if m.onRegistrySync != nil {
+				m.onRegistrySync(event.RevocationVersion, append([]string(nil), event.RevokedPairingIDs...), append([]relayPairingSync(nil), event.Pairings...))
+			}
 		case relayChannelOpened:
 			m.openChannel(event.ChannelID)
 		case relayChannelClosed:

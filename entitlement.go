@@ -10,11 +10,12 @@ import (
 type entitlementState string
 
 const (
-	entitlementActive  entitlementState = "active"
-	entitlementGrace   entitlementState = "grace"
-	entitlementExpired entitlementState = "expired"
-	entitlementRevoked entitlementState = "revoked"
-	entitlementUnknown entitlementState = "unknown"
+	entitlementActive   entitlementState = "active"
+	entitlementGrace    entitlementState = "grace"
+	entitlementExpired  entitlementState = "expired"
+	entitlementRevoked  entitlementState = "revoked"
+	entitlementInactive entitlementState = "inactive"
+	entitlementUnknown  entitlementState = "unknown"
 )
 
 // allowsRelay 报告该状态是否放行 Relay。active 与 grace 视为"生效"——grace 是
@@ -166,7 +167,7 @@ func (m *entitlementManager) resolveLocked(update entitlementUpdate) entitlement
 		AccountID: update.AccountID,
 	}
 	switch update.State {
-	case entitlementActive, entitlementGrace, entitlementExpired, entitlementRevoked:
+	case entitlementActive, entitlementGrace, entitlementExpired, entitlementRevoked, entitlementInactive:
 	default:
 		status.State = entitlementUnknown
 	}
@@ -230,6 +231,8 @@ func describeEntitlement(state entitlementState) string {
 		return "订阅已过期"
 	case entitlementRevoked:
 		return "订阅已被撤销"
+	case entitlementInactive:
+		return "尚未订阅"
 	default:
 		return "订阅状态未知"
 	}

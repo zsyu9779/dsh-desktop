@@ -212,6 +212,21 @@ func TestExistingLANPairingIsRegisteredWithHostIdentityProof(t *testing.T) {
 	}
 }
 
+func TestCompletingLANPairingPersistsLocalDeviceMapping(t *testing.T) {
+	account, store := signedInAccountManager(t)
+	server := &fakeRemoteSetupServer{}
+	manager := newRemoteSetupManager(account, server, store, time.Now)
+	paired := pairedDevice{PairingID: "pairing-account", DeviceID: "device-account", DeviceIdentityPublicKey: []byte("device-key")}
+
+	if err := manager.completeLANPairing(context.Background(), "device-lan-local", paired); err != nil {
+		t.Fatal(err)
+	}
+	got := manager.status().Devices
+	if len(got) != 1 || got[0].LANDeviceID != "device-lan-local" || server.confirmed.PairingID != paired.PairingID {
+		t.Fatalf("completed mapping = %+v, confirmed = %+v", got, server.confirmed)
+	}
+}
+
 func TestLANProofAdapterNeverReplacesMissingExistingHostCredential(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(stateDirEnv, dir)
@@ -240,6 +255,52 @@ func TestLANProofAdapterNeverReplacesMissingExistingHostCredential(t *testing.T)
 	}
 	if !ed25519.Verify(credential.PublicKey, message, signature) {
 		t.Fatal("proof was not signed by the persisted Host LAN credential")
+	}
+}
+
+func TestRegistrySyncRemovesRevokedRelayAndLANPairingState(t *testing.T) {
+	account, secrets := signedInAccountManager(t)
+	manager := newRemoteSetupManager(account, &fakeRemoteSetupServer{}, secrets, time.Now)
+	manager.mu.Lock()
+	manager.devices["pairing-revoked"] = pairedDevice{
+		PairingID: "pairing-revoked", DeviceID: "device-revoked", Name: "Revoked Device",
+		DeviceIdentityPublicKey: make([]byte, 32),
+	}
+	manager.devices["pairing-survives"] = pairedDevice{
+		PairingID: "pairing-survives", DeviceID: "device-survives", Name: "Surviving Device",
+		DeviceIdentityPublicKey: make([]byte, 32),
+	}
+	if err := manager.saveDevicesLocked(); err != nil {
+		t.Fatal(err)
+	}
+	manager.mu.Unlock()
+
+	removed := manager.applyRevocations([]string{"pairing-revoked"})
+
+	if len(removed) != 1 || removed[0].DeviceID != "device-revoked" {
+		t.Fatalf("removed = %+v", removed)
+	}
+	remaining := manager.relayPairings()
+	if len(remaining) != 1 || remaining[0].PairingID != "pairing-survives" {
+		t.Fatalf("remaining = %+v", remaining)
+	}
+	restored := newRemoteSetupManager(account, &fakeRemoteSetupServer{}, secrets, time.Now)
+	if got := restored.relayPairings(); len(got) != 1 || got[0].PairingID != "pairing-survives" {
+		t.Fatalf("persisted remaining = %+v", got)
+	}
+}
+
+func TestRegistrySyncCarriesAuthoritativeLANDeviceMapping(t *testing.T) {
+	account, secrets := signedInAccountManager(t)
+	manager := newRemoteSetupManager(account, &fakeRemoteSetupServer{}, secrets, time.Now)
+	manager.applyPairingSync([]relayPairingSync{{
+		PairingID: "pairing-lan", DeviceID: "device-account", LANDeviceID: "device-lan-local",
+		DeviceIdentityPublicKey: make([]byte, 32),
+	}})
+
+	removed := manager.applyRevocations([]string{"pairing-lan"})
+	if len(removed) != 1 || removed[0].LANDeviceID != "device-lan-local" {
+		t.Fatalf("revoked authoritative LAN mapping = %+v", removed)
 	}
 }
 
@@ -280,6 +341,7 @@ type fakeRemoteSetupServer struct {
 	lanIntent  lanPairingIntent
 	lanPairing pairedDevice
 	cancelErr  error
+	confirmed  pairedDevice
 }
 
 func (f *fakeRemoteSetupServer) createChallenge(context.Context, string, string) (remoteSetupChallenge, error) {
@@ -295,4 +357,12 @@ func (f *fakeRemoteSetupServer) cancelChallenge(_ context.Context, _ string, cha
 func (f *fakeRemoteSetupServer) registerLANPairing(_ context.Context, _ string, intent lanPairingIntent) (pairedDevice, error) {
 	f.lanIntent = intent
 	return f.lanPairing, nil
+}
+func (f *fakeRemoteSetupServer) stageLANPairing(_ context.Context, _ string, intent lanPairingIntent) error {
+	f.lanIntent = intent
+	return nil
+}
+func (f *fakeRemoteSetupServer) confirmPairing(_ context.Context, _, _ string, paired pairedDevice) error {
+	f.confirmed = paired
+	return nil
 }

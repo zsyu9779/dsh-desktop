@@ -69,6 +69,22 @@ func (s *httpAccountServer) migrateHost(ctx context.Context, accessToken string,
 	return s.request(ctx, http.MethodPost, "/v1/account/hosts/"+url.PathEscape(migration.HostID)+"/identity", accessToken, migration, nil)
 }
 
+func (s *httpAccountServer) validateCredential(ctx context.Context, accessToken string) error {
+	return s.request(ctx, http.MethodPost, "/v1/account/snapshot", accessToken, map[string]any{}, nil)
+}
+
+func (s *httpAccountServer) subscriptionStatus(ctx context.Context, accessToken string) (entitlementUpdate, error) {
+	var response struct {
+		State     entitlementState `json:"state"`
+		AccountID string           `json:"accountID"`
+		ExpiresAt time.Time        `json:"expiresAt"`
+	}
+	if err := s.request(ctx, http.MethodPost, "/v1/subscription/status", accessToken, map[string]any{}, &response); err != nil {
+		return entitlementUpdate{}, err
+	}
+	return entitlementUpdate{AccountID: response.AccountID, State: response.State, ExpiresAt: response.ExpiresAt}, nil
+}
+
 func (s *httpAccountServer) request(ctx context.Context, method, path, accessToken string, body, result any) error {
 	if s.baseURL == "" {
 		return errors.New("Account 服务地址未配置")
@@ -113,5 +129,8 @@ func (s *httpAccountServer) request(ctx context.Context, method, path, accessTok
 }
 
 func accountServerURL() string {
-	return strings.TrimSpace(os.Getenv("DSH_ACCOUNT_SERVER_URL"))
+	if configured := strings.TrimSpace(os.Getenv("DSH_ACCOUNT_SERVER_URL")); configured != "" {
+		return configured
+	}
+	return "https://relay.codegoround.com"
 }

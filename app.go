@@ -10,15 +10,16 @@ import (
 
 // App is the root Wails application. It owns the DeepSeek Harness process.
 type App struct {
-	ctx         context.Context
-	dsh         *dshManager
-	remote      *remoteManager
-	notify      *notifyManager
-	account     *accountManager
-	remoteSetup *remoteSetupManager
-	relay       *relayHost
-	transport   *deviceTransportTracker
-	entitlement *entitlementManager
+	ctx              context.Context
+	dsh              *dshManager
+	remote           *remoteManager
+	notify           *notifyManager
+	account          *accountManager
+	remoteSetup      *remoteSetupManager
+	relay            *relayHost
+	transport        *deviceTransportTracker
+	entitlement      *entitlementManager
+	developerAccount bool
 }
 
 // NewApp creates a new App instance.
@@ -32,14 +33,19 @@ func NewApp() *App {
 	baseURL := accountServerURL()
 	accountServer := newHTTPAccountServer(baseURL)
 	secrets := keyringAccountSecretStore{}
+	authorizer := accountAuthorizer(newBrowserAccountAuthorizer(baseURL, func(url string) error {
+		if a.ctx == nil {
+			return fmt.Errorf("Host 尚未启动")
+		}
+		runtime.BrowserOpenURL(a.ctx, url)
+		return nil
+	}))
+	if developerAuthorizer, ok := loadLocalDeveloperAccountAuthorizer(); ok {
+		authorizer = developerAuthorizer
+		a.developerAccount = true
+	}
 	a.account = newAccountManager(
-		newBrowserAccountAuthorizer(baseURL, func(url string) error {
-			if a.ctx == nil {
-				return fmt.Errorf("Host 尚未启动")
-			}
-			runtime.BrowserOpenURL(a.ctx, url)
-			return nil
-		}),
+		authorizer,
 		accountServer,
 		secrets,
 	)
@@ -55,24 +61,31 @@ func NewApp() *App {
 	a.notify.bridge = &notificationBridge{identity: relayIdentity}
 	a.relay.onStatus = func(s relayStatus) {
 		a.emit("relay", s)
+		a.refreshAccountBridgeStatus()
 	}
 	a.relay.onDeviceActive = func(activity deviceActivity) {
 		a.transport.mark(activity)
 	}
+	a.relay.onRegistrySync = func(_ uint64, revokedPairingIDs []string, pairings []relayPairingSync) {
+		a.remoteSetup.applyPairingSync(pairings)
+		removed := a.remoteSetup.applyRevocations(revokedPairingIDs)
+		for _, device := range removed {
+			lanDeviceID := device.LANDeviceID
+			if lanDeviceID == "" {
+				lanDeviceID = device.DeviceID
+			}
+			a.remote.revokeDevice(lanDeviceID)
+		}
+		if len(removed) > 0 || len(pairings) > 0 {
+			a.emit("remote-setup", a.remoteSetup.status())
+		}
+	}
 	a.transport.onChange = func(list []deviceActivity) {
 		a.emit("devices", list)
 	}
-	// 订阅授权状态机：Relay 门禁输入，免费 LAN 与 Pairing 不受影响。生产
-	// entitlement stream 由 ticket 25（StoreKit JWS）接入，接入前保持 unknown，
-	// Relay 门禁因此拒绝公网。
-	a.entitlement = newEntitlementManager(nil, time.Now)
-	a.entitlement.onChange = func(s entitlementStatus) {
-		a.emit("entitlement", s)
-		if !s.RelayAllowed {
-			a.relay.drop()
-		}
-	}
-	a.relay.relayAllowed = a.entitlement.relayAllowed
+	// Account、Pairing 和 Relay 是当前开发者主链路，不在 Host 本地受商业化
+	// 状态拦截。entitlement 状态机保留但暂不接入生产组合；nil relayAllowed
+	// 表示 Relay 始终放行。
 	return a
 }
 
@@ -90,12 +103,22 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.dsh.start()
 
-	// 维持出站 Relay 连接：已登录 Account 会立即上线，否则保持离线并周期重试。
-	a.relay.start()
-	// 已登录 Account 立即订阅 entitlement stream；否则保持 unknown。
+	// 恢复的 keyring credential 先与 server 对账。server 重启会使短期
+	// credential 失效；确认后才恢复 Relay，避免 UI 假登录和无限 401 重连。
 	if a.account.currentStatus().State == accountStateSignedIn {
-		a.entitlement.start()
+		go a.resumeRestoredAccount(ctx)
+	} else if a.developerAccount {
+		go func() {
+			status := a.SignInAccount()
+			a.refreshAccountBridgeStatus()
+			a.emit("account", status)
+		}()
 	}
+	// 启动即写入一次账号/Relay 状态，插件首页即可反映登录态。
+	a.refreshAccountBridgeStatus()
+	// dsh 设置页登录插件（邮箱/密码注册登录）经本地会话桥把凭据交回桌面壳。
+	// 会话文件带启动期随机密钥的 HMAC 写方认证（见 accountBridgeSecret）。
+	go watchAccountBridge(ctx, a, accountBridgeSecret())
 
 	// Background update check: query the npm registry for a newer DSH release
 	// and push the result to the splash screen without blocking startup.
@@ -108,6 +131,40 @@ func (a *App) startup(ctx context.Context) {
 			a.dsh.logf("发现新的 DSH 版本: %s (当前 %s)", info.Latest, info.Current)
 		}
 	}()
+}
+
+func (a *App) resumeRestoredAccount(appCtx context.Context) {
+	delay := time.Second
+	for {
+		validationCtx, cancel := context.WithTimeout(appCtx, 5*time.Second)
+		status := a.account.validateRestoredCredential(validationCtx)
+		cancel()
+		a.refreshAccountBridgeStatus()
+		a.emit("account", status)
+		if status.State == accountStateSignedIn {
+			a.relay.start()
+			if a.entitlement != nil {
+				a.entitlement.start()
+			}
+			return
+		}
+		if status.State != accountStateValidating {
+			return
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-appCtx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		if delay < 30*time.Second {
+			delay *= 2
+			if delay > 30*time.Second {
+				delay = 30 * time.Second
+			}
+		}
+	}
 }
 
 // shutdown is called when the app is about to exit.
@@ -160,15 +217,45 @@ func (a *App) SignInAccount() accountStatus {
 	status := a.account.signIn(ctx)
 	// 重新登录成功后恢复出站 Relay 连接（SignOutAccount 曾将其停止），并订阅
 	// entitlement stream。
-	if status.State == accountStateSignedIn {
-		if a.entitlement != nil {
-			a.entitlement.start()
-		}
-		if a.relay != nil {
-			a.relay.start()
-		}
-	}
+	a.startRelayForSignedInAccount()
+	a.refreshAccountBridgeStatus()
 	return status
+}
+
+// startRelayForSignedInAccount 登录成功后恢复出站 Relay 与 entitlement 订阅。
+func (a *App) startRelayForSignedInAccount() {
+	if a.account.currentStatus().State != accountStateSignedIn {
+		return
+	}
+	if a.entitlement != nil {
+		a.entitlement.start()
+	}
+	if a.relay != nil {
+		a.relay.start()
+	}
+}
+
+// Account bridge（dsh 设置页登录插件）采用/退出实现。
+
+func (a *App) adoptExternalCredential(credential accountCredential) accountStatus {
+	return a.account.adoptExternalCredential(credential)
+}
+
+func (a *App) onBridgeSignedIn(status accountStatus) {
+	a.startRelayForSignedInAccount()
+	a.refreshAccountBridgeStatus()
+	a.emit("account", status)
+}
+
+func (a *App) onBridgeSignedOut() {
+	status := a.SignOutAccount()
+	a.refreshAccountBridgeStatus()
+	a.emit("account", status)
+}
+
+func (a *App) bridgeAdoptFailed(status accountStatus) {
+	a.refreshAccountBridgeStatus()
+	a.emit("account", status)
 }
 
 // AccountStatus returns the current Host Account state.
@@ -204,7 +291,9 @@ func (a *App) SignOutAccount() accountStatus {
 	if a.entitlement != nil {
 		a.entitlement.stop()
 	}
-	a.relay.stop()
+	if a.relay != nil {
+		a.relay.stop()
+	}
 	return a.account.signOut()
 }
 

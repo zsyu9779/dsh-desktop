@@ -82,6 +82,16 @@ var preinstalledPlugins = []preinstallPlugin{
       name: dsh-plugin-diff-review
 `,
 	},
+	{
+		ID:      "account-login",
+		Name:    "dsh-account-login",
+		Dir:     "dsh-account-login",
+		Version: "0.1.2",
+		Insert: `- insert:
+    - id: account-login
+      name: dsh-account-login
+`,
+	},
 }
 
 const preinstallStateFile = "preinstall-state.json"

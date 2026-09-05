@@ -157,6 +157,7 @@ export namespace main {
 	export class pairedDevice {
 	    pairingID: string;
 	    deviceID: string;
+	    lanDeviceID?: string;
 	    name: string;
 	    deviceIdentityPublicKey?: number[];
 	    // Go type: time
@@ -170,6 +171,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.pairingID = source["pairingID"];
 	        this.deviceID = source["deviceID"];
+	        this.lanDeviceID = source["lanDeviceID"];
 	        this.name = source["name"];
 	        this.deviceIdentityPublicKey = source["deviceIdentityPublicKey"];
 	        this.pairedAt = this.convertValues(source["pairedAt"], null);

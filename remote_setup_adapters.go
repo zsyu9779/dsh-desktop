@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"net/url"
 )
@@ -34,4 +35,15 @@ func (s *httpRemoteSetupServer) registerLANPairing(ctx context.Context, accessTo
 	var paired pairedDevice
 	err := s.account.request(ctx, http.MethodPost, "/v1/pairing/lan", accessToken, intent, &paired)
 	return paired, err
+}
+
+func (s *httpRemoteSetupServer) stageLANPairing(ctx context.Context, accessToken string, intent lanPairingIntent) error {
+	return s.account.request(ctx, http.MethodPost, "/v1/pairing/lan", accessToken, intent, nil)
+}
+
+func (s *httpRemoteSetupServer) confirmPairing(ctx context.Context, accessToken, hostID string, paired pairedDevice) error {
+	return s.account.request(ctx, http.MethodPost, "/v1/pairings/confirm", accessToken, map[string]any{
+		"pairingID": paired.PairingID, "hostID": hostID, "deviceID": paired.DeviceID,
+		"deviceIdentityPublicKey": base64.StdEncoding.EncodeToString(paired.DeviceIdentityPublicKey),
+	}, nil)
 }

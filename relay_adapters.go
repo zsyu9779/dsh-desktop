@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -58,12 +59,37 @@ func newWebsocketRelayHostConnector(rawURL string) *websocketRelayHostConnector 
 	return &websocketRelayHostConnector{url: strings.TrimSpace(rawURL), dialer: websocket.DefaultDialer}
 }
 
+// relaySchemeAllowed：生产仅 wss；测试环境（无域名）允许对私网/本机地址用明文 ws，
+// 镜像服务端 -allow-plain-ws 与 iOS AccountServerConfiguration 的本地放行。
+func relaySchemeAllowed(parsed *url.URL) bool {
+	if parsed == nil {
+		return false
+	}
+	if parsed.Scheme == "wss" {
+		return true
+	}
+	if parsed.Scheme == "ws" {
+		return isPrivateRelayHost(parsed.Hostname())
+	}
+	return false
+}
+
+func isPrivateRelayHost(host string) bool {
+	lower := strings.ToLower(host)
+	if lower == "localhost" || strings.HasSuffix(lower, ".local") || lower == "::1" {
+		return true
+	}
+	if ip := net.ParseIP(lower); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+	}
+	return false
+}
 func (c *websocketRelayHostConnector) connect(ctx context.Context, endpoint relayHostEndpoint) (relayHostConnection, error) {
 	if c.url == "" {
 		return nil, errors.New("Relay 服务地址未配置")
 	}
 	parsed, err := url.Parse(c.url)
-	if err != nil || parsed.Scheme != "wss" {
+	if err != nil || !relaySchemeAllowed(parsed) {
 		return nil, errors.New("Relay 服务地址无效")
 	}
 	query := parsed.Query()
@@ -214,4 +240,9 @@ func (s *dshRelayStream) receiveFrame() ([]byte, error) {
 
 func (s *dshRelayStream) close() error { return s.connection.Close() }
 
-func relayServerURL() string { return strings.TrimSpace(os.Getenv("DSH_RELAY_URL")) }
+func relayServerURL() string {
+	if configured := strings.TrimSpace(os.Getenv("DSH_RELAY_URL")); configured != "" {
+		return configured
+	}
+	return "wss://relay.codegoround.com/host"
+}
