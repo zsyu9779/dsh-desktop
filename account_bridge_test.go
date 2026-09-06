@@ -116,6 +116,18 @@ func TestWatchAccountBridgeAdoptsAndConsumesSession(t *testing.T) {
 	if status.State != accountStateSignedIn || status.AccountID != "watched-account" {
 		t.Fatalf("status = %+v", status)
 	}
+	// watcher 在采用成功置为 signedIn 之后才删除 session.json（account_bridge.go 的
+	// adopt -> remove 两步），慢 CI 上状态先于删除可见。轮询等待文件被消费，避免 race。
+	consumeDeadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(bridgeDir, accountBridgeSessionFile)); os.IsNotExist(err) {
+			break
+		}
+		if time.Now().After(consumeDeadline) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 	if _, err := os.Stat(filepath.Join(bridgeDir, accountBridgeSessionFile)); !os.IsNotExist(err) {
 		t.Fatal("session.json was not consumed")
 	}
