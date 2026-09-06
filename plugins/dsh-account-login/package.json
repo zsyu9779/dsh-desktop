@@ -1,6 +1,6 @@
 {
   "name": "dsh-account-login",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Host Account 邮箱/密码注册与登录（dsh 设置页插件，经本地会话桥交回桌面壳启动 Relay）",
   "type": "module",
   "main": "lib/index.js",
