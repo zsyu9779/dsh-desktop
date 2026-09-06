@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -504,7 +505,12 @@ func findCachedDSHExecutable(roots []string, version string) string {
 				nodeModules := filepath.Dir(filepath.Dir(packageDir))
 				executable := filepath.Join(nodeModules, ".bin", "dsh")
 				info, err := os.Stat(executable)
-				if err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+				// Windows 没有 POSIX 可执行位，普通文件 Mode()&0o111 恒为 0；
+				// 仅在非 Windows 平台校验可执行位，避免误判 cache 不可用。
+				if err != nil || info.IsDir() {
+					continue
+				}
+				if goruntime.GOOS != "windows" && info.Mode()&0o111 == 0 {
 					continue
 				}
 				if best == "" || info.ModTime().After(bestMod) {
