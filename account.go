@@ -38,6 +38,7 @@ type accountState string
 const (
 	accountStateSignedOut    accountState = "signed-out"
 	accountStateAuthorizing  accountState = "authorizing"
+	accountStateValidating   accountState = "validating"
 	accountStateSignedIn     accountState = "signed-in"
 	accountStateCanceled     accountState = "canceled"
 	accountStateExpired      accountState = "expired"
@@ -84,6 +85,10 @@ type accountServer interface {
 	migrateHost(context.Context, string, hostAccountMigration) error
 }
 
+type accountCredentialValidator interface {
+	validateCredential(context.Context, string) error
+}
+
 type accountSecretStore interface {
 	get(string) (string, error)
 	set(string, string) error
@@ -124,6 +129,13 @@ func (m *accountManager) currentStatus() accountStatus {
 	return m.status
 }
 
+func (m *accountManager) currentCredential() (accountCredential, error) {
+	if m.currentStatus().State != accountStateSignedIn {
+		return accountCredential{}, errAccountSecretNotFound
+	}
+	return m.loadCredential()
+}
+
 func (m *accountManager) restoreStatus() {
 	identity, identityErr := m.loadIdentity()
 	if identityErr != nil && !errors.Is(identityErr, errAccountSecretNotFound) {
@@ -147,10 +159,46 @@ func (m *accountManager) restoreStatus() {
 	m.status = accountStatus{State: accountStateSignedIn, AccountID: credential.AccountID, HostID: identity.HostID, Message: "Account 已登录"}
 }
 
+// validateRestoredCredential reconciles keyring state with the server before
+// Relay resumes. A server restart intentionally invalidates its process-local
+// credentials, so a 4xx must atomically become a visible signed-out state.
+func (m *accountManager) validateRestoredCredential(ctx context.Context) accountStatus {
+	current := m.currentStatus()
+	if current.State != accountStateSignedIn && current.State != accountStateValidating {
+		return current
+	}
+	validator, ok := m.server.(accountCredentialValidator)
+	if !ok {
+		return current
+	}
+	credential, err := m.loadCredential()
+	if err != nil {
+		return m.setStatus(accountStatus{State: accountStateSignedOut, HostID: current.HostID, Message: "Account credential 不可用，请重新登录", Retryable: true})
+	}
+	if err := validator.validateCredential(ctx, credential.AccessToken); err == nil {
+		return m.setStatus(accountStatus{
+			State: accountStateSignedIn, AccountID: credential.AccountID, HostID: current.HostID,
+			Message: "Account 已登录",
+		})
+	} else if !errors.Is(err, errAccountRejected) {
+		// Keep the credential, but do not expose a verified/signed-in state or
+		// start Relay until a later validation succeeds.
+		return m.setStatus(accountStatus{
+			State: accountStateValidating, AccountID: credential.AccountID, HostID: current.HostID,
+			Message: "暂时无法验证 Account，正在后台重试", Retryable: true,
+		})
+	}
+	_ = m.secrets.delete(accountCredentialSecret)
+	return m.setStatus(accountStatus{
+		State: accountStateSignedOut, HostID: current.HostID,
+		Message: "Account 登录已失效，请重新登录", Retryable: true,
+	})
+}
+
 func (m *accountManager) signIn(ctx context.Context) accountStatus {
 	m.operationMu.Lock()
 	defer m.operationMu.Unlock()
-	m.setStatus(accountStatus{State: accountStateAuthorizing, Message: "正在通过系统浏览器登录 Account"})
+	m.setStatus(accountStatus{State: accountStateAuthorizing, Message: "正在登录 Account"})
 
 	identityToken, err := m.authorizer.authorize(ctx)
 	if err != nil {
@@ -163,7 +211,12 @@ func (m *accountManager) signIn(ctx context.Context) accountStatus {
 	if credential.AccountID == "" || credential.AccessToken == "" {
 		return m.fail("Account 服务返回了无效登录结果")
 	}
+	return m.finishSignIn(ctx, credential)
+}
 
+// finishSignIn 完成登录的公共尾部：登记 Host 身份、持久化凭据并置为已登录。
+// signIn（浏览器/Apple 流）与 adoptExternalCredential（dsh 设置页插件桥）共用。
+func (m *accountManager) finishSignIn(ctx context.Context, credential accountCredential) accountStatus {
 	identity, err := m.loadOrCreateIdentity()
 	if err != nil {
 		return m.fail(fmt.Sprintf("无法使用 Host 身份：%v", err))
@@ -195,6 +248,27 @@ func (m *accountManager) signIn(ctx context.Context) accountStatus {
 		HostID:    identity.HostID,
 		Message:   "Account 已登录",
 	})
+}
+
+// adoptExternalCredential 采用 Account bridge（dsh 设置页插件注册/登录后写入的
+// 会话文件）中的凭据。插件已完成 /v1/account/register|login 的账号交换，这里不再
+// 走 authorizer/authenticate，直接完成 Host 登记并进入既有链路。
+func (m *accountManager) adoptExternalCredential(credential accountCredential) accountStatus {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
+	if credential.AccountID == "" || credential.AccessToken == "" {
+		return m.fail("Account bridge 提供了无效凭据")
+	}
+	if credential.ExpiresAt.IsZero() || time.Now().After(credential.ExpiresAt) {
+		return m.fail("Account bridge 凭据已过期，请重新登录")
+	}
+	if current := m.currentStatus(); current.State == accountStateSignedIn && current.AccountID == credential.AccountID {
+		return current
+	}
+	m.setStatus(accountStatus{State: accountStateAuthorizing, Message: "正在登录 Account（插件会话）"})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	return m.finishSignIn(ctx, credential)
 }
 
 func (m *accountManager) fail(message string) accountStatus {

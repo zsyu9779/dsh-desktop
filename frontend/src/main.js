@@ -27,6 +27,7 @@ const remoteCertFp = document.getElementById('remote-cert-fp');
 const remoteAllowPrivileged = document.getElementById('remote-allow-privileged');
 const remoteDevices = document.getElementById('remote-devices');
 const remoteDeviceList = document.getElementById('remote-device-list');
+const remoteMessage = document.getElementById('remote-message');
 const accountRemote = document.getElementById('account-remote');
 const accountRemoteMessage = document.getElementById('account-remote-message');
 const accountRemoteSetup = document.getElementById('account-remote-setup');
@@ -34,8 +35,14 @@ const accountRemoteQR = document.getElementById('account-remote-qr');
 const accountRemoteExpiry = document.getElementById('account-remote-expiry');
 const accountRemoteDevices = document.getElementById('account-remote-devices');
 const accountRemoteDeviceList = document.getElementById('account-remote-device-list');
-const lanRegistration = document.getElementById('lan-registration');
-const lanRegistrationList = document.getElementById('lan-registration-list');
+const remotePanelTrigger = document.getElementById('btn-remote-panel');
+const remotePanel = document.getElementById('remote-panel');
+const remotePanelBackdrop = document.getElementById('remote-panel-backdrop');
+const remotePanelContent = document.getElementById('remote-panel-content');
+
+// Remote control belongs to the running product, not its splash screen. Move
+// the existing controls above the DSH iframe so Pairing stays reachable.
+remotePanelContent.append(accountRemote, remoteEl);
 
 let remoteEnabled = false;
 let remoteSetupPoll = null;
@@ -129,11 +136,18 @@ function setActionsVisible(visible) {
 }
 
 function showHarness(url) {
-    if (!url || enteringHarness) return;
+    if (!url) return;
+    if (!harnessFrame.hidden) {
+        harnessURL = url;
+        harnessFrame.src = url;
+        return;
+    }
+    if (enteringHarness) return;
 
     enteringHarness = true;
     harnessURL = url;
     harnessFrame.addEventListener('load', () => {
+        enteringHarness = false;
         harnessFrame.hidden = false;
         splash.hidden = true;
     }, { once: true });
@@ -155,6 +169,24 @@ function setReadyUI(visible) {
     actionsReady.hidden = !visible;
     remoteEl.hidden = !visible;
     accountRemote.hidden = !visible;
+    remotePanelTrigger.hidden = !visible;
+    if (!visible) closeRemotePanel();
+}
+
+function openRemotePanel() {
+    remotePanel.hidden = false;
+    remotePanelBackdrop.hidden = false;
+    remotePanelTrigger.setAttribute('aria-expanded', 'true');
+    App.AccountStatus().then(handleAccountStatus).catch((err) => console.error(err));
+    App.RemoteSetupStatus().then(handleRemoteSetup).catch((err) => console.error(err));
+    App.RemoteStatus().then(handleRemote).catch((err) => console.error(err));
+    refreshRelayAndDevices();
+}
+
+function closeRemotePanel() {
+    remotePanel.hidden = true;
+    remotePanelBackdrop.hidden = true;
+    remotePanelTrigger.setAttribute('aria-expanded', 'false');
 }
 
 function stopRemoteSetupPoll() {
@@ -184,36 +216,6 @@ function renderPairedDevices(devices) {
     });
 }
 
-async function renderLANRegistration(pairedDevices) {
-    try {
-        const registered = new Set((pairedDevices || []).map((device) => device.deviceID));
-        const devices = (await App.ListDevices()).filter((device) => !registered.has(device.deviceId));
-        lanRegistrationList.innerHTML = '';
-        lanRegistration.hidden = devices.length === 0;
-        devices.forEach((device) => {
-            const item = document.createElement('li');
-            item.className = 'remote-device';
-            const name = document.createElement('span');
-            name.textContent = device.name || 'LAN Device';
-            const register = document.createElement('button');
-            register.className = 'btn btn-quiet';
-            register.textContent = '登记';
-            register.addEventListener('click', async () => {
-                try {
-                    handleRemoteSetup(await App.RegisterLANPairing(device.deviceId, device.name || 'LAN Device'));
-                } catch (err) {
-                    accountRemoteMessage.textContent = 'LAN Pairing 登记失败：' + err;
-                }
-            });
-            item.appendChild(name);
-            item.appendChild(register);
-            lanRegistrationList.appendChild(item);
-        });
-    } catch (err) {
-        console.error(err);
-    }
-}
-
 function handleRemoteSetup(status) {
     if (!status) return;
     accountRemoteMessage.textContent = status.message || '';
@@ -226,27 +228,26 @@ function handleRemoteSetup(status) {
         ? '此 QR 将于 ' + new Date(status.expiresAt).toLocaleTimeString() + ' 失效'
         : '';
     const start = document.getElementById('btn-account-remote-start');
-    start.textContent = pending ? '等待批准' : '设置';
+    start.textContent = pending ? '等待 Device 批准' : '生成配对码';
     start.disabled = !accountSignedIn || pending || cancelFailed;
     document.getElementById('btn-account-remote-refresh').hidden = cancelFailed;
     renderPairedDevices(status.devices);
-    renderLANRegistration(status.devices);
     if (pending) startRemoteSetupPoll(); else stopRemoteSetupPoll();
 }
 
 function handleAccountStatus(status) {
     accountSignedIn = status && status.state === 'signed-in';
-    document.getElementById('btn-account-sign-in').textContent = accountSignedIn ? 'Account 已登录' : '登录 Account';
-    document.getElementById('btn-account-sign-in').disabled = accountSignedIn;
+	 const validating = status && status.state === 'validating';
+	 // 登录入口已收敛到 dsh「设置 → Account 登录」页面（dsh-account-login 插件）；
+	 // 外壳面板只保留配对状态展示，不再提供登录按钮。
     document.getElementById('btn-account-remote-start').disabled = !accountSignedIn;
-    if (!accountSignedIn && status && status.message) accountRemoteMessage.textContent = status.message;
+    if (!accountSignedIn) accountRemoteMessage.textContent = '尚未登录：请在 dsh「设置 → Account 登录」用邮箱/密码注册或登录。';
 }
 
 function handleRemote(s) {
     if (!s) return;
     remoteEnabled = !!s.enabled;
-    remoteEl.classList.toggle('remote-enabled', remoteEnabled);
-    btnRemoteToggle.textContent = remoteEnabled ? '关闭' : '手机远程';
+    btnRemoteToggle.textContent = remoteEnabled ? '关闭' : '开启';
     remoteDetail.hidden = !remoteEnabled;
     if (remoteEnabled) {
         const pairingUrl = s.url ? (s.url + '/?pair=' + s.pairingCode) : '';
@@ -306,11 +307,14 @@ async function renderDevices() {
             btn.className = 'btn btn-quiet';
             btn.textContent = '吊销';
             btn.addEventListener('click', async () => {
+                if (!window.confirm(`确认吊销 ${d.name || '此 Device'}？该 Device 将立即失去 LAN 访问。`)) return;
                 try {
-                    await App.RevokeDevice(d.deviceId);
+                    const revoked = await App.RevokeDevice(d.deviceId);
+                    if (!revoked) throw new Error('Device 已不在 Pairing 列表中');
+                    remoteMessage.textContent = `${d.name || 'Device'} 已吊销。`;
                     renderDevices();
                 } catch (err) {
-                    console.error(err);
+                    remoteMessage.textContent = '吊销失败：' + err;
                 }
             });
             li.appendChild(name);
@@ -389,27 +393,6 @@ function handleRelay(s) {
     text.textContent = s.message || ('Relay：' + relayLabel(s.state));
 }
 
-function entitlementLabel(state) {
-    switch (state) {
-        case 'active': return '已生效';
-        case 'grace': return '宽限期';
-        case 'expired': return '已过期';
-        case 'revoked': return '已撤销';
-        default: return '未知';
-    }
-}
-
-function handleEntitlement(s) {
-    if (!s) return;
-    const el = document.getElementById('entitlement-status');
-    el.hidden = false;
-    const dot = document.getElementById('entitlement-status-dot');
-    dot.className = 'entitlement-status-dot ent-' + (s.state || 'unknown');
-    const text = document.getElementById('entitlement-status-text');
-    const availability = s.relayAllowed ? ' · 公网可用' : ' · 公网不可用';
-    text.textContent = (s.message || ('订阅状态：' + entitlementLabel(s.state))) + availability;
-}
-
 function transportLabel(t) {
     return t === 'relay' ? 'Relay' : (t === 'lan' ? 'LAN' : (t || '—'));
 }
@@ -436,7 +419,6 @@ function handleDevices(list) {
 function refreshRelayAndDevices() {
     App.RelayStatus().then(handleRelay).catch(() => {});
     App.ActiveDevices().then(handleDevices).catch(() => {});
-    App.EntitlementStatus().then(handleEntitlement).catch(() => {});
 }
 
 function handleStatus(s) {
@@ -451,6 +433,9 @@ function handleStatus(s) {
             document.getElementById('btn-enter').onclick = () => showHarness(s.url);
             App.RemoteStatus().then(handleRemote).catch((err) => console.error(err));
             App.RemoteSetupStatus().then(handleRemoteSetup).catch((err) => console.error(err));
+            // The DSH workspace is the product's home. Remote setup remains
+            // reachable from the floating control above the iframe.
+            showHarness(s.url);
             break;
 
         case 'starting':
@@ -470,6 +455,9 @@ function handleStatus(s) {
 }
 
 document.getElementById('btn-retry').addEventListener('click', () => App.Retry());
+remotePanelTrigger.addEventListener('click', openRemotePanel);
+document.getElementById('btn-remote-panel-close').addEventListener('click', closeRemotePanel);
+remotePanelBackdrop.addEventListener('click', closeRemotePanel);
 document.getElementById('btn-node').addEventListener('click', () => App.OpenNodeJS());
 document.getElementById('btn-browser').addEventListener('click', () => App.OpenInBrowser());
 document.getElementById('btn-quit').addEventListener('click', () => App.Quit());
@@ -512,14 +500,7 @@ document.getElementById('btn-account-remote-start').addEventListener('click', as
     }
 });
 
-document.getElementById('btn-account-sign-in').addEventListener('click', async () => {
-    try {
-        handleAccountStatus(await App.SignInAccount());
-        if (accountSignedIn) handleRemoteSetup(await App.RemoteSetupStatus());
-    } catch (err) {
-        accountRemoteMessage.textContent = 'Account 登录失败：' + err;
-    }
-});
+
 
 document.getElementById('btn-account-remote-refresh').addEventListener('click', async () => {
     try {
@@ -582,7 +563,7 @@ runtime.EventsOn('dsh-update', renderUpdate);
 runtime.EventsOn('notifications', handleNotification);
 runtime.EventsOn('relay', handleRelay);
 runtime.EventsOn('devices', handleDevices);
-runtime.EventsOn('entitlement', handleEntitlement);
+runtime.EventsOn('account', handleAccountStatus);
 App.Status().then(handleStatus).catch((err) => console.error(err));
 App.AccountStatus().then(handleAccountStatus).catch((err) => console.error(err));
 App.DSHVersion().then((v) => { updateCurrent.textContent = v || '—'; }).catch(() => {});

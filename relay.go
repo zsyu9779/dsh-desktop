@@ -15,15 +15,26 @@ import (
 type relayEventType string
 
 const (
-	relayChannelOpened relayEventType = "channel_opened"
-	relayCiphertext    relayEventType = "ciphertext"
-	relayChannelClosed relayEventType = "channel_closed"
+	relayChannelOpened  relayEventType = "channel_opened"
+	relayCiphertext     relayEventType = "ciphertext"
+	relayChannelClosed  relayEventType = "channel_closed"
+	relayRegistrySynced relayEventType = "registry_synced"
 )
 
 type relayEvent struct {
-	Type       relayEventType `json:"type"`
-	ChannelID  string         `json:"channelID"`
-	Ciphertext []byte         `json:"ciphertext,omitempty"`
+	Type              relayEventType     `json:"type"`
+	ChannelID         string             `json:"channelID"`
+	Ciphertext        []byte             `json:"ciphertext,omitempty"`
+	RevocationVersion uint64             `json:"revocationVersion,omitempty"`
+	RevokedPairingIDs []string           `json:"revokedPairingIDs,omitempty"`
+	Pairings          []relayPairingSync `json:"pairings,omitempty"`
+}
+
+type relayPairingSync struct {
+	PairingID               string `json:"pairingID"`
+	DeviceID                string `json:"deviceID"`
+	DeviceIdentityPublicKey []byte `json:"deviceIdentityPublicKey"`
+	LANDeviceID             string `json:"lanDeviceID,omitempty"`
 }
 
 type relayFrame struct {
@@ -123,6 +134,9 @@ type relayHost struct {
 	onStatus func(relayStatus)
 	// onDeviceActive 在 Device 经 Relay 完成握手时回调，标记活动 Device 传输。
 	onDeviceActive func(activity deviceActivity)
+	// onRegistrySync applies server revocations to both Relay and LAN Pairing
+	// state before the next channel can be accepted.
+	onRegistrySync func(version uint64, revokedPairingIDs []string, pairings []relayPairingSync)
 	// relayAllowed 是订阅门禁：返回 true 才允许建立 Relay 连接；nil 视为始终放行。
 	relayAllowed func() bool
 	// sleepAfter 是重连退避等待的注入点；默认 time.After，测试可注入可控时钟。

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -52,6 +54,63 @@ func TestHostCanSignInToAccount(t *testing.T) {
 	}
 	if current := app.AccountStatus(); current != status {
 		t.Fatalf("AccountStatus = %+v, want %+v", current, status)
+	}
+}
+
+func TestRestoredCredentialRejectedAfterServerRestartBecomesSignedOut(t *testing.T) {
+	store := newMemorySecretStore()
+	credential := validAccountCredential()
+	encoded, err := json.Marshal(credential)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.set(accountCredentialSecret, string(encoded)); err != nil {
+		t.Fatal(err)
+	}
+	identity := hostAccountIdentity{KeyType: identityKeyTypeX25519, HostID: "host-restored", PrivateKey: base64.RawStdEncoding.EncodeToString(make([]byte, 32)), RegisteredAccounts: map[string]bool{credential.AccountID: true}}
+	identityJSON, err := json.Marshal(identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.set(accountIdentitySecret, string(identityJSON)); err != nil {
+		t.Fatal(err)
+	}
+	server := &validatingFakeAccountServer{
+		fakeAccountServer: fakeAccountServer{credential: credential},
+		validationErr:     errAccountRejected,
+	}
+	manager := newAccountManager(fakeAccountAuthorizer{}, server, store)
+
+	status := manager.validateRestoredCredential(context.Background())
+
+	if status.State != accountStateSignedOut || !status.Retryable {
+		t.Fatalf("status = %+v", status)
+	}
+	if _, err := store.get(accountCredentialSecret); !errors.Is(err, errAccountSecretNotFound) {
+		t.Fatalf("credential remained after rejection: %v", err)
+	}
+}
+
+func TestRestoredCredentialNetworkFailureWaitsForValidationWithoutDeletingSecret(t *testing.T) {
+	store := newMemorySecretStore()
+	credential := validAccountCredential()
+	encoded, _ := json.Marshal(credential)
+	_ = store.set(accountCredentialSecret, string(encoded))
+	identity := hostAccountIdentity{KeyType: identityKeyTypeX25519, HostID: "host-restored", PrivateKey: base64.RawStdEncoding.EncodeToString(make([]byte, 32)), RegisteredAccounts: map[string]bool{credential.AccountID: true}}
+	identityJSON, _ := json.Marshal(identity)
+	_ = store.set(accountIdentitySecret, string(identityJSON))
+	server := &validatingFakeAccountServer{fakeAccountServer: fakeAccountServer{credential: credential}, validationErr: errors.New("offline")}
+	manager := newAccountManager(fakeAccountAuthorizer{}, server, store)
+
+	if status := manager.validateRestoredCredential(context.Background()); status.State != accountStateValidating {
+		t.Fatalf("status = %+v, want pending network validation", status)
+	}
+	if _, err := store.get(accountCredentialSecret); err != nil {
+		t.Fatalf("transient validation deleted credential: %v", err)
+	}
+	server.validationErr = nil
+	if status := manager.validateRestoredCredential(context.Background()); status.State != accountStateSignedIn {
+		t.Fatalf("revalidated status = %+v", status)
 	}
 }
 
@@ -347,6 +406,15 @@ type fakeAccountServer struct {
 	registrationCount  int
 	migration          hostAccountMigration
 	migrateCount       int
+}
+
+type validatingFakeAccountServer struct {
+	fakeAccountServer
+	validationErr error
+}
+
+func (f *validatingFakeAccountServer) validateCredential(context.Context, string) error {
+	return f.validationErr
 }
 
 func (f *fakeAccountServer) authenticate(_ context.Context, identityToken string) (accountCredential, error) {

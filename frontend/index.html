@@ -14,34 +14,6 @@
         hidden
     ></iframe>
 
-    <div class="remote" id="remote" hidden>
-        <div class="remote-head">
-            <span class="remote-title">手机远程</span>
-            <button class="btn btn-quiet" id="btn-remote-toggle">手机远程</button>
-        </div>
-        <div class="remote-detail" id="remote-detail" hidden>
-            <img class="remote-qr" id="remote-qr" alt="配对二维码" />
-            <p class="remote-url" id="remote-url"></p>
-            <div class="remote-actions">
-                <button class="btn" id="btn-remote-copy">复制地址</button>
-                <button class="btn btn-quiet" id="btn-remote-regen">重新生成配对码</button>
-            </div>
-            <div class="remote-meta" id="remote-meta" hidden>
-                <p class="remote-meta-item" id="remote-host-key" hidden></p>
-                <p class="remote-meta-item" id="remote-cert-fp" hidden></p>
-                <label class="remote-allow">
-                    <input type="checkbox" id="remote-allow-privileged" />
-                    允许远程管理敏感设置（settings / 凭据等）
-                </label>
-            </div>
-            <div class="remote-devices" id="remote-devices" hidden>
-                <p class="remote-devices-title">已配对设备</p>
-                <ul class="remote-device-list" id="remote-device-list"></ul>
-            </div>
-        </div>
-        <p class="remote-hint">手机与电脑连同一 WiFi，扫码即可在手机上操控 DeepSeek Harness。</p>
-    </div>
-
     <div class="splash" id="splash">
         <div class="brand">
             <div class="logo" aria-hidden="true">
@@ -69,27 +41,50 @@
             <button class="btn btn-primary" id="btn-enter">进入桌面界面</button>
         </div>
 
+        <div class="remote" id="remote" hidden>
+            <div class="remote-head">
+                <span class="remote-title">手机远程</span>
+                <button class="btn btn-quiet" id="btn-remote-toggle">开启</button>
+            </div>
+            <div class="remote-detail" id="remote-detail" hidden>
+                <img class="remote-qr" id="remote-qr" alt="配对二维码" />
+                <p class="remote-url" id="remote-url"></p>
+                <div class="remote-actions">
+                    <button class="btn" id="btn-remote-copy">复制地址</button>
+                    <button class="btn btn-quiet" id="btn-remote-regen">重新生成配对码</button>
+                </div>
+                <div class="remote-meta" id="remote-meta" hidden>
+                    <p class="remote-meta-item" id="remote-host-key" hidden></p>
+                    <p class="remote-meta-item" id="remote-cert-fp" hidden></p>
+                    <label class="remote-allow">
+                        <input type="checkbox" id="remote-allow-privileged" />
+                        允许远程管理敏感设置（settings / 凭据等）
+                    </label>
+                </div>
+                <div class="remote-devices" id="remote-devices" hidden>
+                    <p class="remote-devices-title">已配对设备</p>
+                    <ul class="remote-device-list" id="remote-device-list"></ul>
+                </div>
+            </div>
+            <p class="remote-hint" id="remote-message">Device 与 Host 接入同一 Wi‑Fi 后，扫码即可开始局域网遥控。</p>
+        </div>
+
         <div class="remote account-remote" id="account-remote" hidden>
             <div class="remote-head">
-                <span class="remote-title">Account Remote</span>
+                <span class="remote-title">跨网络连接</span>
                 <div class="remote-actions">
-                    <button class="btn btn-quiet" id="btn-account-sign-in">登录 Account</button>
-                    <button class="btn btn-primary" id="btn-account-remote-start" disabled>设置</button>
+                    <button class="btn btn-primary" id="btn-account-remote-start" disabled>生成配对码</button>
                 </div>
             </div>
             <div class="relay-status" id="relay-status" hidden>
                 <span class="relay-status-dot" id="relay-status-dot"></span>
                 <span class="relay-status-text" id="relay-status-text">Relay 离线</span>
             </div>
-            <div class="entitlement-status" id="entitlement-status" hidden>
-                <span class="entitlement-status-dot" id="entitlement-status-dot"></span>
-                <span class="entitlement-status-text" id="entitlement-status-text">订阅状态未知</span>
-            </div>
             <div class="remote-devices" id="active-devices" hidden>
                 <p class="remote-devices-title">活动 Device</p>
                 <ul class="remote-device-list" id="active-device-list"></ul>
             </div>
-            <p class="remote-hint" id="account-remote-message">登录 Account 后，为每个 Device–Host 关系只需 Pairing 一次。</p>
+            <p class="remote-hint" id="account-remote-message">登录后生成配对码，Device 扫描一次即可持续使用。</p>
             <div class="remote-detail" id="account-remote-setup" hidden>
                 <img class="remote-qr" id="account-remote-qr" alt="Account Remote Pairing 二维码" />
                 <p class="remote-url" id="account-remote-expiry"></p>
@@ -101,10 +96,6 @@
             <div class="remote-devices" id="account-remote-devices" hidden>
                 <p class="remote-devices-title">已 Pairing Device</p>
                 <ul class="remote-device-list" id="account-remote-device-list"></ul>
-            </div>
-            <div class="remote-devices" id="lan-registration" hidden>
-                <p class="remote-devices-title">登记已有 LAN Pairing</p>
-                <ul class="remote-device-list" id="lan-registration-list"></ul>
             </div>
         </div>
 
@@ -133,6 +124,22 @@
 
         <pre class="logs" id="logs" hidden></pre>
     </div>
+
+    <button class="remote-panel-trigger" id="btn-remote-panel" type="button" hidden>
+        <span class="remote-panel-trigger-dot" aria-hidden="true"></span>
+        手机远程
+    </button>
+    <div class="remote-panel-backdrop" id="remote-panel-backdrop" hidden></div>
+    <aside class="remote-panel" id="remote-panel" aria-label="手机远程设置" hidden>
+        <div class="remote-panel-header">
+            <div>
+                <h2>手机远程</h2>
+                <p>登录、配对并查看 Device 状态</p>
+            </div>
+            <button class="remote-panel-close" id="btn-remote-panel-close" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="remote-panel-content" id="remote-panel-content"></div>
+    </aside>
 </div>
 <script type="module" src="./src/main.js"></script>
 </body>

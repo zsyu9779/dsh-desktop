@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,18 +16,21 @@ import (
 // loopback target) plus the JWT cookie. If this fails, the phone's real-time
 // stream is broken by the Origin rewrite.
 func TestReverseProxyWSWithBrowserOrigin(t *testing.T) {
-	upgrader := websocket.Upgrader{}
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/events.mux" {
-			_, _ = io.WriteString(w, "ok")
-			return
-		}
-		c, err := upgrader.Upgrade(w, r, nil)
+	var originMu sync.Mutex
+	var receivedOrigin string
+	upgrader := websocket.Upgrader{CheckOrigin: func(request *http.Request) bool {
+		originMu.Lock()
+		receivedOrigin = request.Header.Get("Origin")
+		originMu.Unlock()
+		return true
+	}}
+	upstream := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		connection, err := upgrader.Upgrade(response, request, nil)
 		if err != nil {
 			return
 		}
-		defer c.Close()
-		_ = c.WriteMessage(websocket.TextMessage, []byte("origin-ok"))
+		defer connection.Close()
+		_ = connection.WriteMessage(websocket.TextMessage, []byte("origin-ok"))
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -74,6 +77,15 @@ func TestReverseProxyWSWithBrowserOrigin(t *testing.T) {
 	_, msg, err := c.ReadMessage()
 	if err != nil {
 		t.Fatalf("no frame through proxy with Origin: %v", err)
+	}
+	if string(msg) != "origin-ok" {
+		t.Fatalf("frame = %q", msg)
+	}
+	originMu.Lock()
+	gotOrigin := receivedOrigin
+	originMu.Unlock()
+	if gotOrigin != upstream.URL {
+		t.Fatalf("upstream Origin = %q, want %q", gotOrigin, upstream.URL)
 	}
 	t.Logf("received with Origin: %.200s", string(msg))
 }

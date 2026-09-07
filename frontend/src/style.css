@@ -55,6 +55,104 @@ body {
     transform: translateZ(0);
 }
 
+.remote-panel-trigger {
+    position: fixed;
+    z-index: 40;
+    top: 18px;
+    right: 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 11px;
+    background: rgba(18, 23, 37, 0.92);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    backdrop-filter: blur(16px);
+}
+
+.remote-panel-trigger:hover {
+    background: rgba(29, 37, 58, 0.96);
+    border-color: rgba(106, 139, 255, 0.65);
+}
+
+.remote-panel-trigger-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #46d17d;
+    box-shadow: 0 0 0 4px rgba(70, 209, 125, 0.13);
+}
+
+.remote-panel-backdrop {
+    position: fixed;
+    z-index: 48;
+    inset: 0;
+    background: rgba(4, 7, 14, 0.48);
+    backdrop-filter: blur(2px);
+}
+
+.remote-panel {
+    position: fixed;
+    z-index: 50;
+    top: 0;
+    right: 0;
+    width: min(460px, 92vw);
+    height: 100%;
+    padding: 24px;
+    overflow-y: auto;
+    border-left: 1px solid var(--border);
+    background: #101522;
+    box-shadow: -18px 0 55px rgba(0, 0, 0, 0.4);
+}
+
+.remote-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
+.remote-panel-header h2 {
+    font-size: 20px;
+    letter-spacing: -0.3px;
+}
+
+.remote-panel-header p {
+    margin-top: 5px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.remote-panel-close {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg-accent);
+    color: var(--text-muted);
+    font-size: 23px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.remote-panel-content {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.remote-panel-content .remote {
+    width: 100%;
+}
+
 .splash {
     /* min-height (not a fixed height) so the column grows with content and the
        #app scroll container can reveal everything instead of clipping it. */
@@ -277,10 +375,6 @@ body {
 }
 
 .remote {
-    position: absolute;
-    z-index: 20;
-    top: 20px;
-    right: 20px;
     width: min(440px, 100%);
     padding: 18px;
     border: 1px solid var(--border);
@@ -290,36 +384,6 @@ body {
     flex-direction: column;
     gap: 14px;
     align-items: center;
-}
-
-#remote:not(.remote-enabled) {
-    width: auto;
-    padding: 0;
-    border-radius: 12px;
-    background: rgba(13, 17, 28, 0.86);
-    backdrop-filter: blur(12px);
-}
-
-#remote:not(.remote-enabled) .remote-title,
-#remote:not(.remote-enabled) .remote-hint {
-    display: none;
-}
-
-#remote:not(.remote-enabled) .btn {
-    padding: 9px 14px;
-    font-size: 14px;
-    font-weight: 600;
-}
-
-#remote.remote-enabled {
-    max-height: calc(100% - 40px);
-    overflow: auto;
-    background: rgba(13, 17, 28, 0.96);
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
-}
-
-.account-remote {
-    position: static;
 }
 
 .remote-head {

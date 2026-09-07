@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -546,6 +548,13 @@ func (m *dshManager) buildCommand(ctx context.Context, port int, nodeInstall nod
 		parts := strings.Fields(customCommand)
 		bin = parts[0]
 		args = append(parts[1:], webArgs...)
+	} else if cached := cachedDSHExecutable(); cached != "" {
+		// pnpm dlx still performs registry resolution on every launch. Reuse its
+		// complete, version-matched environment when available; this turns normal
+		// launches from minutes of network work into a local process spawn.
+		bin = cached
+		args = webArgs
+		m.logf("dsh cache: %s", cached)
 	} else {
 		bin = nodeInstall.npmPath
 		// Bootstrap the package manager version used by upstream, then let pnpm
@@ -590,7 +599,71 @@ func (m *dshManager) buildCommand(ctx context.Context, port int, nodeInstall nod
 	if wd != "" {
 		cmd.Env = withEnv(cmd.Env, "DSH_WORKSPACE", wd)
 	}
+	// Account 登录插件（dsh-account-login）需要账号 server 地址与本地会话桥目录，
+	// 与桌面壳共用同一份配置/状态目录。
+	cmd.Env = withEnv(cmd.Env, "DSH_ACCOUNT_SERVER_URL", accountServerURL())
+	cmd.Env = withEnv(cmd.Env, "DSH_ACCOUNT_BRIDGE_DIR", accountBridgeDir())
+	cmd.Env = withEnv(cmd.Env, "DSH_ACCOUNT_BRIDGE_SECRET", accountBridgeSecret())
 	return cmd, nil
+}
+
+type dshPackageManifest struct {
+	Version string `json:"version"`
+}
+
+// cachedDSHExecutable returns a complete pnpm-dlx installation matching the
+// pinned DSH version. Store links alone are insufficient because DSH resolves
+// its peer plugins from the dlx node_modules environment.
+func cachedDSHExecutable() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	return findCachedDSHExecutable([]string{
+		filepath.Join(home, "Library", "Caches", "pnpm", "dlx"),
+		filepath.Join(managedNPMCacheDir(), "_npx"),
+	}, strings.TrimPrefix(pinnedDSHPackage(), "@deepseek-ai/dsh@"))
+}
+
+func findCachedDSHExecutable(roots []string, version string) string {
+	var best string
+	var bestMod time.Time
+	for _, root := range roots {
+		patterns := []string{
+			filepath.Join(root, "*", "*", "node_modules", "@deepseek-ai", "dsh", "package.json"),
+			filepath.Join(root, "*", "node_modules", "@deepseek-ai", "dsh", "package.json"),
+		}
+		for _, pattern := range patterns {
+			manifests, _ := filepath.Glob(pattern)
+			for _, manifestPath := range manifests {
+				data, err := os.ReadFile(manifestPath)
+				if err != nil {
+					continue
+				}
+				var manifest dshPackageManifest
+				if json.Unmarshal(data, &manifest) != nil || manifest.Version != version {
+					continue
+				}
+				packageDir := filepath.Dir(manifestPath)
+				nodeModules := filepath.Dir(filepath.Dir(packageDir))
+				executable := filepath.Join(nodeModules, ".bin", "dsh")
+				info, err := os.Stat(executable)
+				// Windows 没有 POSIX 可执行位，普通文件 Mode()&0o111 恒为 0；
+				// 仅在非 Windows 平台校验可执行位，避免误判 cache 不可用。
+				if err != nil || info.IsDir() {
+					continue
+				}
+				if goruntime.GOOS != "windows" && info.Mode()&0o111 == 0 {
+					continue
+				}
+				if best == "" || info.ModTime().After(bestMod) {
+					best = executable
+					bestMod = info.ModTime()
+				}
+			}
+		}
+	}
+	return best
 }
 
 // findExecutable returns the absolute path to `name`. It first uses the

@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	_ "embed"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -452,6 +453,60 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 		devices.touch(claims.DeviceID)
 		if r.transport != nil {
 			r.transport.mark(deviceActivity{DeviceID: claims.DeviceID, Name: devices.name(claims.DeviceID), Transport: deviceTransportLAN})
+		}
+		if req.Method == http.MethodPost && req.URL.Path == "/api/remote/account-pairing-proof" {
+			var body struct {
+				DeviceChallenge string `json:"deviceChallenge"`
+			}
+			if json.NewDecoder(req.Body).Decode(&body) != nil {
+				http.Error(w, "invalid request", http.StatusBadRequest)
+				return
+			}
+			challenge, err := base64.StdEncoding.DecodeString(body.DeviceChallenge)
+			if err != nil || len(challenge) < 16 || r.app == nil || r.app.remoteSetup == nil {
+				http.Error(w, "invalid challenge", http.StatusBadRequest)
+				return
+			}
+			identity, hostProof, err := r.app.remoteSetup.stageLANProof(req.Context(), claims.DeviceID, challenge)
+			if err != nil {
+				http.Error(w, "pairing proof unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			hostKey, err := identity.x25519PublicKey()
+			if err != nil {
+				http.Error(w, "Host identity unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"hostID": identity.HostID, "hostIdentityPublicKey": base64.StdEncoding.EncodeToString(hostKey),
+				"deviceChallenge": body.DeviceChallenge, "hostProof": base64.StdEncoding.EncodeToString(hostProof),
+			})
+			return
+		}
+		if req.Method == http.MethodPost && req.URL.Path == "/api/remote/account-pairing-complete" {
+			var body struct {
+				PairingID               string `json:"pairingID"`
+				DeviceID                string `json:"deviceID"`
+				DeviceIdentityPublicKey string `json:"deviceIdentityPublicKey"`
+			}
+			if json.NewDecoder(req.Body).Decode(&body) != nil || body.PairingID == "" || body.DeviceID == "" || r.app == nil || r.app.remoteSetup == nil {
+				http.Error(w, "invalid request", http.StatusBadRequest)
+				return
+			}
+			deviceKey, err := base64.StdEncoding.DecodeString(body.DeviceIdentityPublicKey)
+			if err != nil || len(deviceKey) == 0 {
+				http.Error(w, "invalid device identity", http.StatusBadRequest)
+				return
+			}
+			if err := r.app.remoteSetup.completeLANPairing(req.Context(), claims.DeviceID, pairedDevice{
+				PairingID: body.PairingID, DeviceID: body.DeviceID, DeviceIdentityPublicKey: deviceKey,
+			}); err != nil {
+				http.Error(w, "pairing confirmation failed", http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
 		}
 		if isPrivilegedPath(req.URL.Path) && !allowPrivileged {
 			r.logf("auth rejected: privileged method %s denied (from %s)", req.URL.Path, req.RemoteAddr)

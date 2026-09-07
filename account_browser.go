@@ -9,10 +9,41 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 )
+
+type localDeveloperAccountAuthorizer struct{ token string }
+
+func (a localDeveloperAccountAuthorizer) authorize(context.Context) (string, error) {
+	if a.token == "" {
+		return "", errAccountRejected
+	}
+	return a.token, nil
+}
+
+func loadLocalDeveloperAccountAuthorizer() (accountAuthorizer, bool) {
+	path := strings.TrimSpace(os.Getenv("DSH_DEV_IDENTITY_TOKEN_FILE"))
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			return nil, false
+		}
+		path = filepath.Join(home, ".dsh-desktop", "dev-identity-token")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	token := strings.TrimSpace(string(data))
+	if token == "" {
+		return nil, false
+	}
+	return localDeveloperAccountAuthorizer{token: token}, true
+}
 
 type browserAccountAuthorizer struct {
 	accountBaseURL string

@@ -38,6 +38,7 @@ type remoteSetupChallenge struct {
 type pairedDevice struct {
 	PairingID               string    `json:"pairingID"`
 	DeviceID                string    `json:"deviceID"`
+	LANDeviceID             string    `json:"lanDeviceID,omitempty"`
 	Name                    string    `json:"name"`
 	DeviceIdentityPublicKey []byte    `json:"deviceIdentityPublicKey,omitempty"`
 	PairedAt                time.Time `json:"pairedAt,omitempty"`
@@ -81,6 +82,47 @@ type remoteSetupServer interface {
 	challengeResult(context.Context, string, string) (remoteSetupResult, error)
 	cancelChallenge(context.Context, string, string) error
 	registerLANPairing(context.Context, string, lanPairingIntent) (pairedDevice, error)
+	stageLANPairing(context.Context, string, lanPairingIntent) error
+	confirmPairing(context.Context, string, string, pairedDevice) error
+}
+
+func (m *remoteSetupManager) completeLANPairing(ctx context.Context, lanDeviceID string, paired pairedDevice) error {
+	credential, identity, err := m.account.remoteIdentity()
+	if err != nil {
+		return err
+	}
+	if err := m.server.confirmPairing(ctx, credential.AccessToken, identity.HostID, paired); err != nil {
+		return err
+	}
+	paired.LANDeviceID = lanDeviceID
+	paired.PairedAt = m.now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.devices[paired.PairingID] = paired
+	m.state = remoteSetupCompleted
+	return m.saveDevicesLocked()
+}
+
+func (m *remoteSetupManager) stageLANProof(ctx context.Context, lanDeviceID string, challenge []byte) (hostAccountIdentity, []byte, error) {
+	if lanDeviceID == "" || len(challenge) == 0 || m.lanProof == nil {
+		return hostAccountIdentity{}, nil, errors.New("LAN Pairing proof unavailable")
+	}
+	credential, identity, err := m.account.remoteIdentity()
+	if err != nil {
+		return hostAccountIdentity{}, nil, err
+	}
+	intent := lanPairingIntent{
+		HostID: identity.HostID, DeviceID: lanDeviceID, DeviceName: "LAN Device",
+		Nonce: base64.RawURLEncoding.EncodeToString(challenge),
+	}
+	intent.HostLANPublicKey, err = m.lanProof.lanPublicKey(lanDeviceID)
+	if err == nil {
+		intent.HostProof, err = m.lanProof.signLANPairing(lanDeviceID, intent.signingBytes())
+	}
+	if err == nil {
+		err = m.server.stageLANPairing(ctx, credential.AccessToken, intent)
+	}
+	return identity, intent.HostProof, err
 }
 
 type remoteSetupManager struct {
@@ -317,6 +359,55 @@ func (m *remoteSetupManager) relayPairings() []relayPairing {
 		})
 	}
 	return pairings
+}
+
+// applyRevocations removes server-revoked Pairings from durable Host state and
+// returns the affected Devices so the LAN registry can revoke them as well.
+func (m *remoteSetupManager) applyRevocations(pairingIDs []string) []pairedDevice {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	removed := make([]pairedDevice, 0, len(pairingIDs))
+	for _, pairingID := range pairingIDs {
+		if device, ok := m.devices[pairingID]; ok {
+			removed = append(removed, device)
+			delete(m.devices, pairingID)
+		}
+	}
+	if len(removed) > 0 {
+		_ = m.saveDevicesLocked()
+		if len(m.devices) == 0 && m.state == remoteSetupCompleted {
+			m.state = remoteSetupIdle
+		}
+	}
+	return removed
+}
+
+func (m *remoteSetupManager) applyPairingSync(pairings []relayPairingSync) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	changed := false
+	for _, pairing := range pairings {
+		if pairing.PairingID == "" || pairing.DeviceID == "" || len(pairing.DeviceIdentityPublicKey) != 32 {
+			continue
+		}
+		if existing, exists := m.devices[pairing.PairingID]; exists {
+			if pairing.LANDeviceID != "" && existing.LANDeviceID != pairing.LANDeviceID {
+				existing.LANDeviceID = pairing.LANDeviceID
+				m.devices[pairing.PairingID] = existing
+				changed = true
+			}
+			continue
+		}
+		m.devices[pairing.PairingID] = pairedDevice{
+			PairingID: pairing.PairingID, DeviceID: pairing.DeviceID, Name: "Device",
+			LANDeviceID: pairing.LANDeviceID, DeviceIdentityPublicKey: append([]byte(nil), pairing.DeviceIdentityPublicKey...), PairedAt: m.now(),
+		}
+		changed = true
+	}
+	if changed {
+		m.state = remoteSetupCompleted
+		_ = m.saveDevicesLocked()
+	}
 }
 
 func (m *remoteSetupManager) restoreDevices() {
