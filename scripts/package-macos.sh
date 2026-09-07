@@ -40,6 +40,12 @@ if [[ -n "${MACOS_CERTIFICATE_P12_BASE64:-}" ]]; then
   security unlock-keychain -p "$keychain_password" "$keychain"
   security import "$work/identity.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign >/dev/null
   security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$keychain_password" "$keychain" >/dev/null
+  # GitHub's fresh runner does not reliably add a newly-created keychain to the
+  # user search list. codesign can otherwise report "no identity found" even
+  # though security import succeeded and --keychain points at the right file.
+  if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+    security list-keychains -d user -s "$keychain"
+  fi
   signing_args=(--keychain "$keychain")
 fi
 

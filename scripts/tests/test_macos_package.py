@@ -114,6 +114,15 @@ class MacOSPackageTest(unittest.TestCase):
         self.assertFalse(self.output.exists())
         self.assertFalse(list(self.root.glob("dsh-signing.*")))
 
+    def test_ci_adds_imported_keychain_to_user_search_list(self):
+        self.env.update(GITHUB_ACTIONS="true", MACOS_CERTIFICATE_P12_BASE64="dGVzdA==",
+                        MACOS_CERTIFICATE_PASSWORD="fake-password")
+        result, events = self.run_package()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        search_list = next(e for e in events if e[:5] == ["security", "list-keychains", "-d", "user", "-s"])
+        self.assertTrue(search_list[-1].endswith("signing.keychain-db"))
+        self.assertLess(events.index(search_list), next(i for i, e in enumerate(events) if e[0] == "codesign"))
+
 
 if __name__ == "__main__":
     unittest.main()
