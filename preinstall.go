@@ -41,7 +41,7 @@ var preinstalledPlugins = []preinstallPlugin{
 		ID:      "file-changes",
 		Name:    "dsh-file-changes",
 		Dir:     "file-changes",
-		Version: "0.2.0",
+		Version: "0.2.2",
 		Insert: `- insert:
     - id: file-changes
       name: dsh-file-changes
@@ -66,7 +66,7 @@ var preinstalledPlugins = []preinstallPlugin{
 		ID:      "open-editor",
 		Name:    "dsh-plugin-open-editor",
 		Dir:     "open-editor",
-		Version: "0.1.0",
+		Version: "0.1.1",
 		Insert: `- insert:
     - id: open-editor
       name: dsh-plugin-open-editor
@@ -76,7 +76,7 @@ var preinstalledPlugins = []preinstallPlugin{
 		ID:      "diff-review",
 		Name:    "dsh-plugin-diff-review",
 		Dir:     "diff-review",
-		Version: "0.1.0",
+		Version: "0.1.1",
 		Insert: `- insert:
     - id: diff-review
       name: dsh-plugin-diff-review

@@ -12,3 +12,4 @@ frontend/dist
 
 # go build cache (kept in workspace so builds work under the file sandbox)
 .gocache/
+.gomods/

@@ -2,22 +2,77 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App is the root Wails application. It owns the DeepSeek Harness process.
 type App struct {
-	ctx    context.Context
-	dsh    *dshManager
-	remote *remoteManager
+	ctx         context.Context
+	dsh         *dshManager
+	remote      *remoteManager
+	notify      *notifyManager
+	account     *accountManager
+	remoteSetup *remoteSetupManager
+	relay       *relayHost
+	transport   *deviceTransportTracker
+	entitlement *entitlementManager
 }
 
 // NewApp creates a new App instance.
 func NewApp() *App {
 	a := &App{}
+	a.transport = newDeviceTransportTracker(time.Now)
 	a.dsh = newDSHManager(a)
 	a.remote = newRemoteManager(a)
+	a.remote.transport = a.transport
+	a.notify = newNotifyManager(a)
+	baseURL := accountServerURL()
+	accountServer := newHTTPAccountServer(baseURL)
+	secrets := keyringAccountSecretStore{}
+	a.account = newAccountManager(
+		newBrowserAccountAuthorizer(baseURL, func(url string) error {
+			if a.ctx == nil {
+				return fmt.Errorf("Host 尚未启动")
+			}
+			runtime.BrowserOpenURL(a.ctx, url)
+			return nil
+		}),
+		accountServer,
+		secrets,
+	)
+	a.remoteSetup = newRemoteSetupManager(a.account, newHTTPRemoteSetupServer(accountServer), secrets, time.Now, a.remote)
+	relayIdentity := accountRelayIdentitySource{account: a.account, pairings: a.remoteSetup}
+	a.relay = newRelayHost(
+		relayIdentity,
+		newWebsocketRelayHostConnector(relayServerURL()),
+		newDSHRelayUpstream(func() string { return a.dsh.current().URL }),
+	)
+	// 通知桥复用 Host Relay 身份：去重后的 Notification 派生为面向每个目标 Device
+	// 的加密 envelope（投递由 dsh-server 侧 ticket 21 与跨仓 harness ticket 24 负责）。
+	a.notify.bridge = &notificationBridge{identity: relayIdentity}
+	a.relay.onStatus = func(s relayStatus) {
+		a.emit("relay", s)
+	}
+	a.relay.onDeviceActive = func(activity deviceActivity) {
+		a.transport.mark(activity)
+	}
+	a.transport.onChange = func(list []deviceActivity) {
+		a.emit("devices", list)
+	}
+	// 订阅授权状态机：Relay 门禁输入，免费 LAN 与 Pairing 不受影响。生产
+	// entitlement stream 由 ticket 25（StoreKit JWS）接入，接入前保持 unknown，
+	// Relay 门禁因此拒绝公网。
+	a.entitlement = newEntitlementManager(nil, time.Now)
+	a.entitlement.onChange = func(s entitlementStatus) {
+		a.emit("entitlement", s)
+		if !s.RelayAllowed {
+			a.relay.drop()
+		}
+	}
+	a.relay.relayAllowed = a.entitlement.relayAllowed
 	return a
 }
 
@@ -35,6 +90,13 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.dsh.start()
 
+	// 维持出站 Relay 连接：已登录 Account 会立即上线，否则保持离线并周期重试。
+	a.relay.start()
+	// 已登录 Account 立即订阅 entitlement stream；否则保持 unknown。
+	if a.account.currentStatus().State == accountStateSignedIn {
+		a.entitlement.start()
+	}
+
 	// Background update check: query the npm registry for a newer DSH release
 	// and push the result to the splash screen without blocking startup.
 	go func() {
@@ -51,6 +113,8 @@ func (a *App) startup(ctx context.Context) {
 // shutdown is called when the app is about to exit.
 func (a *App) shutdown(ctx context.Context) {
 	a.remote.disable()
+	a.relay.stop()
+	a.notify.stop()
 	a.dsh.stop()
 }
 
@@ -87,6 +151,94 @@ func (a *App) OpenNodeJS() {
 // Logs returns recent DeepSeek Harness log lines.
 func (a *App) Logs() string {
 	return a.dsh.logsString()
+}
+
+// SignInAccount opens the system browser and completes Host Account sign-in.
+func (a *App) SignInAccount() accountStatus {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	status := a.account.signIn(ctx)
+	// 重新登录成功后恢复出站 Relay 连接（SignOutAccount 曾将其停止），并订阅
+	// entitlement stream。
+	if status.State == accountStateSignedIn {
+		if a.entitlement != nil {
+			a.entitlement.start()
+		}
+		if a.relay != nil {
+			a.relay.start()
+		}
+	}
+	return status
+}
+
+// AccountStatus returns the current Host Account state.
+func (a *App) AccountStatus() accountStatus {
+	return a.account.currentStatus()
+}
+
+// RelayStatus returns the current outbound Relay connection state.
+func (a *App) RelayStatus() relayStatus {
+	return a.relay.status()
+}
+
+// EntitlementStatus returns the Host Account subscription entitlement state.
+func (a *App) EntitlementStatus() entitlementStatus {
+	if a.entitlement == nil {
+		return entitlementStatus{State: entitlementUnknown, Message: "订阅状态未知"}
+	}
+	return a.entitlement.current()
+}
+
+// ActiveDevices 返回活动窗口内经 LAN 或 Relay 传输的 Device。
+func (a *App) ActiveDevices() []deviceActivity {
+	if a.transport == nil {
+		return nil
+	}
+	return a.transport.activeDevices()
+}
+
+// SignOutAccount clears the Account credential while retaining Host and LAN identities.
+func (a *App) SignOutAccount() accountStatus {
+	// 先退订 entitlement（回到 unknown），再断开 Relay、清除 credential：
+	// 避免退出后仍有出站连接持有已失效的 token，或残留 active 误报。
+	if a.entitlement != nil {
+		a.entitlement.stop()
+	}
+	a.relay.stop()
+	return a.account.signOut()
+}
+
+// StartRemoteSetup creates or returns the active single-use Pairing QR.
+func (a *App) StartRemoteSetup() (remoteSetupStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return a.remoteSetup.start(ctx)
+}
+
+// RefreshRemoteSetup checks whether a Device approved the active challenge.
+func (a *App) RefreshRemoteSetup() (remoteSetupStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return a.remoteSetup.refresh(ctx)
+}
+
+// CancelRemoteSetup invalidates the current Pairing challenge.
+func (a *App) CancelRemoteSetup() (remoteSetupStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return a.remoteSetup.cancel(ctx)
+}
+
+// RemoteSetupStatus returns the persisted Remote Pairing state.
+func (a *App) RemoteSetupStatus() remoteSetupStatus {
+	return a.remoteSetup.status()
+}
+
+// RegisterLANPairing registers an existing LAN Pairing using a Host identity proof.
+func (a *App) RegisterLANPairing(deviceID, deviceName string) (remoteSetupStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return a.remoteSetup.registerLAN(ctx, deviceID, deviceName)
 }
 
 // EnableRemote starts the authenticated LAN proxy for phone remote control.
@@ -145,11 +297,16 @@ func (a *App) UninstallPreinstalledPlugin(id string) bool {
 	return true
 }
 
-// emitRemote pushes a remote status snapshot to the frontend.
-func (a *App) emitRemote(s remoteStatus) {
+// emit 将值以指定事件名推送到前端；Host 尚未启动时静默丢弃。
+func (a *App) emit(name string, value any) {
 	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "remote", s)
+		runtime.EventsEmit(a.ctx, name, value)
 	}
+}
+
+// emitRemote 推送一个 remote 状态快照到前端。
+func (a *App) emitRemote(s remoteStatus) {
+	a.emit("remote", s)
 }
 
 // Quit exits the application.

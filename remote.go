@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/subtle"
 	"crypto/tls"
 	_ "embed"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -106,6 +108,7 @@ type remoteManager struct {
 	cred            *hostCredential
 	certFingerprint string
 	devices         *deviceRegistry
+	transport       *deviceTransportTracker
 	port            int
 	target          string
 	server          *http.Server
@@ -180,6 +183,10 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 	if err != nil {
 		return r.buildStatusLocked(), err
 	}
+	// Persist the stable leaf so the fingerprint survives restarts (ticket 04).
+	if err := cred.save(stateDir()); err != nil {
+		return r.buildStatusLocked(), fmt.Errorf("persist leaf cert: %w", err)
+	}
 	tlsCert, err := tls.X509KeyPair(leafCertPEM, leafKeyPEM)
 	if err != nil {
 		return r.buildStatusLocked(), err
@@ -200,6 +207,12 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	targetOrigin := targetURL.Scheme + "://" + targetURL.Host
+	targetUsername := ""
+	targetPassword := ""
+	if targetURL.User != nil {
+		targetUsername = targetURL.User.Username()
+		targetPassword, _ = targetURL.User.Password()
+	}
 	baseDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		baseDirector(req)
@@ -207,6 +220,9 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 		// (the wire Host header) untouched; force it to loopback so dsh's
 		// /api trust fence accepts the request.
 		req.Host = targetURL.Host
+		if targetUsername != "" {
+			req.SetBasicAuth(targetUsername, targetPassword)
+		}
 		// Prefer uncompressed HTML so our polyfill injection never lands on
 		// compressed bytes; we still handle gzip defensively in ModifyResponse.
 		req.Header.Set("Accept-Encoding", "identity")
@@ -265,7 +281,9 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 	r.pairingCode = code
 	r.pairingExpiry = time.Now().Add(pairingCodeTTL)
 	r.port = port
-	r.target = target
+	safeTarget := *targetURL
+	safeTarget.User = nil
+	r.target = safeTarget.String()
 	r.certFingerprint = fingerprint
 	r.server = server
 
@@ -281,7 +299,7 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 		}
 	}()
 
-	r.logf("remote enabled: https://0.0.0.0:%d -> %s (cert=%s, pairing=%s)", port, target, fingerprint, code)
+	r.logf("remote enabled: https://0.0.0.0:%d -> %s (cert=%s, pairing=%s)", port, safeTarget.String(), fingerprint, code)
 	return r.buildStatusLocked(), nil
 }
 
@@ -327,6 +345,45 @@ func (r *remoteManager) listDevices() []deviceIdentity {
 		return nil
 	}
 	return devices.list()
+}
+
+func (r *remoteManager) lanCredentialFor(deviceID string) (*hostCredential, error) {
+	r.mu.Lock()
+	cred := r.cred
+	devices := r.devices
+	r.mu.Unlock()
+	if devices == nil {
+		devices = newDeviceRegistry(filepath.Join(stateDir(), "devices.json"))
+	}
+	if !devices.exists(deviceID) {
+		return nil, errors.New("Device 没有既有 LAN Pairing")
+	}
+	if cred == nil {
+		var err error
+		cred, err = loadExistingHostCredential(stateDir())
+		if err != nil {
+			return nil, err
+		}
+	}
+	return cred, nil
+}
+
+func (r *remoteManager) lanPublicKey(deviceID string) (string, error) {
+	cred, err := r.lanCredentialFor(deviceID)
+	if err != nil {
+		return "", err
+	}
+	return cred.publicKeyB64(), nil
+}
+
+// signLANPairing signs an Account registration intent only for a Device
+// already authorized by this Host's persisted LAN credential.
+func (r *remoteManager) signLANPairing(deviceID string, message []byte) ([]byte, error) {
+	cred, err := r.lanCredentialFor(deviceID)
+	if err != nil {
+		return nil, err
+	}
+	return ed25519.Sign(cred.privateKey(), message), nil
 }
 
 func (r *remoteManager) revokeDevice(deviceID string) bool {
@@ -393,6 +450,9 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		devices.touch(claims.DeviceID)
+		if r.transport != nil {
+			r.transport.mark(deviceActivity{DeviceID: claims.DeviceID, Name: devices.name(claims.DeviceID), Transport: deviceTransportLAN})
+		}
 		if isPrivilegedPath(req.URL.Path) && !allowPrivileged {
 			r.logf("auth rejected: privileged method %s denied (from %s)", req.URL.Path, req.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)

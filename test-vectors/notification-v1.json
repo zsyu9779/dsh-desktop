@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "pairingID": "pairing-1",
+  "hostID": "host-1",
+  "deviceID": "device-1",
+  "devicePrivateKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+  "devicePublicKey": "pOCSkrZRwni5dyxWn1+puxPZBrRqtoyd+dwrRAn4ogk=",
+  "hostPrivateKey": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+  "hostPublicKey": "zo060cy2M+x7cMF4FKXHbs0CloUFDTRHRboFhw5YfVk=",
+  "context": "ZHNoLW5vdGlmaWNhdGlvbi12MQAAAAAJcGFpcmluZy0xAAAABmhvc3QtMQAAAAhkZXZpY2UtMQ==",
+  "envelopeKey": "M0DehEPvDdqWgXO99B7ZkiGq7uy3R0foCo26we3oIMo=",
+  "envelopeAAD": "dsh-notification-v1/envelope",
+  "nonce": "BgYGBgYGBgYGBgYG",
+  "plaintext": "eyJzZXNzaW9uSUQiOiJzZXNzaW9uLXNlY3JldCIsInN1bW1hcnkiOiLlt6Xlhbfor7fmsYLmjojmnYMiLCJ2ZXJzaW9uIjoxLCJ0eXBlIjoiYXBwcm92YWwifQ==",
+  "ciphertext": "BgYGBgYGBgYGBgYGkvbX9TEkTDUsRO/n7C4CEZRiD8ik7/Azt9Wqs2J5pH0bivBvSYI/qPP2P6Mh6LP2AdfstynkvAbZiQQnvTvcr8GGVgHpBph6AdZ0k6kAAkKF5jH5k0hF47xjO7tZOSQfXf7GbzJK6H/k/WI="
+}

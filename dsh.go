@@ -7,9 +7,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -77,6 +79,10 @@ type dshManager struct {
 	state   string
 	message string
 
+	embedProxy    *embeddedProxy
+	proxyStarting bool
+	proxyErr      error
+
 	logsMu sync.Mutex
 	logs   []string
 }
@@ -122,6 +128,7 @@ func (m *dshManager) start() {
 	m.running = true
 	m.cancel = cancel
 	m.runDone = done
+	m.proxyErr = nil
 	m.mu.Unlock()
 
 	go func() {
@@ -166,6 +173,7 @@ func (m *dshManager) stop() {
 	if cancel != nil {
 		cancel()
 	}
+	m.stopEmbeddedProxy()
 
 	if cmd != nil && cmd.Process != nil {
 		if done != nil {
@@ -200,6 +208,8 @@ func awaitProcessExit(cmd *exec.Cmd, done <-chan struct{}) {
 // run performs the actual launch: check env, pick a port, spawn dsh, and wait
 // for readiness. Its context is cancelled when the window or app closes.
 func (m *dshManager) run(ctx context.Context) {
+	defer m.stopEmbeddedProxy()
+
 	// 1) Environment check: Node.js / npm must be present.
 	m.setStatus("starting", "正在检查环境…")
 	nodeInstall, err := m.checkEnvironment()
@@ -250,15 +260,17 @@ func (m *dshManager) run(ctx context.Context) {
 	m.mu.Lock()
 	m.cmd = cmd
 	m.port = port
-	m.url = fmt.Sprintf("http://127.0.0.1:%d", port)
+	// DSH 0.1.2+ protects the web UI with a one-time token that it publishes
+	// on stdout. Do not expose the unauthenticated bare URL to the frontend.
+	m.url = ""
 	m.done = make(chan struct{})
 	done := m.done
 	m.mu.Unlock()
 
 	m.logf("dsh 已启动 (pid=%d, port=%d)", cmd.Process.Pid, port)
 
-	go m.pump(stdout)
-	go m.pump(stderr)
+	go m.pump(ctx, stdout)
+	go m.pump(ctx, stderr)
 
 	// Single owner of cmd.Wait(); closes done once with the exit error.
 	go func() {
@@ -279,6 +291,10 @@ func (m *dshManager) run(ctx context.Context) {
 			// slow/stuck npm install would survive in the background.
 			terminateProcessTree(cmd, false)
 			awaitProcessExit(cmd, done)
+			if proxyErr := m.embeddedProxyError(); proxyErr != nil {
+				m.fail(fmt.Errorf("无法准备 DeepSeek Harness 嵌入页面: %w", proxyErr))
+				return
+			}
 			m.fail(fmt.Errorf("等待 DeepSeek Harness 就绪超时 (%v)", readyTimeout))
 			return
 		}
@@ -295,9 +311,15 @@ func (m *dshManager) run(ctx context.Context) {
 	}
 
 	m.setStatus("ready", "DeepSeek Harness 已就绪")
+	if m.app.notify != nil {
+		m.app.notify.start(m.url)
+	}
 
 	// Block until the process exits after we are ready.
 	<-done
+	if m.app.notify != nil {
+		m.app.notify.stop()
+	}
 	m.markStopped()
 
 	if m.stopping.Load() {
@@ -362,11 +384,22 @@ func (m *dshManager) waitReady(ctx context.Context, port int) <-chan bool {
 					ch <- false
 					return
 				}
+				if m.embeddedProxyError() != nil {
+					ch <- false
+					return
+				}
 				resp, err := client.Get(url)
 				if err == nil {
+					statusCode := resp.StatusCode
 					_ = resp.Body.Close()
-					ch <- true
-					return
+					m.mu.Lock()
+					hasAdvertisedURL := m.url != ""
+					m.mu.Unlock()
+					serverUp := statusCode == http.StatusUnauthorized || statusCode >= 200 && statusCode < 400
+					if serverUp && hasAdvertisedURL {
+						ch <- true
+						return
+					}
 				}
 				elapsed := int(time.Since(start).Seconds())
 				m.setStatus("starting", fmt.Sprintf("正在启动 DeepSeek Harness…（%d 秒，首次运行需下载依赖）", elapsed))
@@ -377,12 +410,128 @@ func (m *dshManager) waitReady(ctx context.Context, port int) <-chan bool {
 }
 
 // pump streams a child output pipe into the log ring and log file.
-func (m *dshManager) pump(r io.Reader) {
+func (m *dshManager) pump(ctx context.Context, r io.Reader) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
-		m.logf("%s", scanner.Text())
+		line := scanner.Text()
+		m.captureAdvertisedURL(ctx, line)
+		m.logf("%s", redactAdvertisedURL(line))
 	}
+}
+
+// captureAdvertisedURL consumes the one-time URL printed by `dsh web` and
+// publishes a cookie-free loopback proxy URL that WKWebView can embed.
+func (m *dshManager) captureAdvertisedURL(ctx context.Context, line string) bool {
+	m.mu.Lock()
+	expectedPort := m.port
+	if m.url != "" || m.proxyStarting {
+		m.mu.Unlock()
+		return true
+	}
+	m.mu.Unlock()
+
+	parsed, ok := parseAdvertisedURL(line, expectedPort)
+	if !ok {
+		return false
+	}
+
+	m.mu.Lock()
+	if m.url != "" || m.proxyStarting {
+		m.mu.Unlock()
+		return true
+	}
+	m.proxyStarting = true
+	m.mu.Unlock()
+
+	proxy, err := newEmbeddedProxy(ctx, parsed)
+	if err != nil {
+		m.mu.Lock()
+		m.proxyStarting = false
+		if ctx.Err() == nil {
+			m.proxyErr = err
+		}
+		m.mu.Unlock()
+		return false
+	}
+
+	m.mu.Lock()
+	m.proxyStarting = false
+	if ctx.Err() != nil {
+		m.mu.Unlock()
+		proxy.Close()
+		return false
+	}
+	m.embedProxy = proxy
+	m.url = proxy.URL
+	m.proxyErr = nil
+	m.mu.Unlock()
+	go func() {
+		select {
+		case <-proxy.FirstRequest():
+			m.logf("桌面嵌入页面已连接")
+		case <-ctx.Done():
+		}
+	}()
+	return true
+}
+
+func parseAdvertisedURL(line string, expectedPort int) (*url.URL, bool) {
+	const marker = "dsh web: "
+	markerAt := strings.Index(line, marker)
+	if markerAt < 0 {
+		return nil, false
+	}
+	fields := strings.Fields(line[markerAt+len(marker):])
+	if len(fields) == 0 {
+		return nil, false
+	}
+	parsed, err := url.Parse(fields[0])
+	if err != nil || parsed.Scheme != "http" || parsed.Hostname() != "127.0.0.1" || parsed.User != nil {
+		return nil, false
+	}
+	advertisedPort, err := strconv.Atoi(parsed.Port())
+	if err != nil {
+		return nil, false
+	}
+	if advertisedPort != expectedPort {
+		return nil, false
+	}
+	return parsed, true
+}
+
+func (m *dshManager) embeddedProxyError() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.proxyErr
+}
+
+func (m *dshManager) stopEmbeddedProxy() {
+	m.mu.Lock()
+	proxy := m.embedProxy
+	m.embedProxy = nil
+	m.url = ""
+	m.mu.Unlock()
+	proxy.Close()
+}
+
+func redactAdvertisedURL(line string) string {
+	const marker = "dsh web: "
+	markerAt := strings.Index(line, marker)
+	if markerAt < 0 {
+		return line
+	}
+	urlStart := markerAt + len(marker)
+	urlEnd := urlStart
+	for urlEnd < len(line) && line[urlEnd] != ' ' && line[urlEnd] != '\t' {
+		urlEnd++
+	}
+	parsed, err := url.Parse(line[urlStart:urlEnd])
+	if err != nil || parsed.RawQuery == "" {
+		return line
+	}
+	redactedURL := parsed.Scheme + "://" + parsed.Host + parsed.EscapedPath() + "?<REDACTED>"
+	return line[:urlStart] + redactedURL + line[urlEnd:]
 }
 
 // buildCommand constructs the dsh launcher command.

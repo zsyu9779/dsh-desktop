@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-open-editor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Open the current DSH project in your favorite editor — one click for the default (VS Code), a picker for Cursor, Windsurf, Trae, JetBrains IDEs, Sublime Text, the OS file manager, and custom commands.",
   "contributors": [
     "Civitasv"
@@ -29,7 +29,7 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-connection",
-        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-store",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-conversation",
@@ -48,7 +48,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-store": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-client-ui-conversation": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
     "@types/node": "^22.0.0",

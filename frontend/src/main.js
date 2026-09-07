@@ -22,12 +22,24 @@ const remoteDetail = document.getElementById('remote-detail');
 const remoteQR = document.getElementById('remote-qr');
 const remoteURL = document.getElementById('remote-url');
 const remoteMeta = document.getElementById('remote-meta');
-const remoteFp = document.getElementById('remote-fp');
+const remoteHostKey = document.getElementById('remote-host-key');
+const remoteCertFp = document.getElementById('remote-cert-fp');
 const remoteAllowPrivileged = document.getElementById('remote-allow-privileged');
 const remoteDevices = document.getElementById('remote-devices');
 const remoteDeviceList = document.getElementById('remote-device-list');
+const accountRemote = document.getElementById('account-remote');
+const accountRemoteMessage = document.getElementById('account-remote-message');
+const accountRemoteSetup = document.getElementById('account-remote-setup');
+const accountRemoteQR = document.getElementById('account-remote-qr');
+const accountRemoteExpiry = document.getElementById('account-remote-expiry');
+const accountRemoteDevices = document.getElementById('account-remote-devices');
+const accountRemoteDeviceList = document.getElementById('account-remote-device-list');
+const lanRegistration = document.getElementById('lan-registration');
+const lanRegistrationList = document.getElementById('lan-registration-list');
 
 let remoteEnabled = false;
+let remoteSetupPoll = null;
+let accountSignedIn = false;
 
 // --- DSH version update check ---
 const updateEl = document.getElementById('update');
@@ -100,6 +112,13 @@ btnUpdate.addEventListener('click', async () => {
     }
 });
 
+// --- notify subscription ---
+const notifyEl = document.getElementById('notify');
+const notifyList = document.getElementById('notify-list');
+
+let notifications = [];
+let notifyFilter = '';
+
 function setBusy(busy) {
     spinner.classList.toggle('hidden', !busy);
     progress.classList.toggle('hidden', !busy);
@@ -135,12 +154,99 @@ function refreshHarnessLayer() {
 function setReadyUI(visible) {
     actionsReady.hidden = !visible;
     remoteEl.hidden = !visible;
+    accountRemote.hidden = !visible;
+}
+
+function stopRemoteSetupPoll() {
+    if (remoteSetupPoll) window.clearInterval(remoteSetupPoll);
+    remoteSetupPoll = null;
+}
+
+function startRemoteSetupPoll() {
+    stopRemoteSetupPoll();
+    remoteSetupPoll = window.setInterval(async () => {
+        try {
+            handleRemoteSetup(await App.RefreshRemoteSetup());
+        } catch (err) {
+            console.error(err);
+        }
+    }, 2000);
+}
+
+function renderPairedDevices(devices) {
+    accountRemoteDeviceList.innerHTML = '';
+    accountRemoteDevices.hidden = !devices || devices.length === 0;
+    (devices || []).forEach((device) => {
+        const item = document.createElement('li');
+        item.className = 'remote-device';
+        item.textContent = (device.name || 'Device') + ' · ' + device.deviceID;
+        accountRemoteDeviceList.appendChild(item);
+    });
+}
+
+async function renderLANRegistration(pairedDevices) {
+    try {
+        const registered = new Set((pairedDevices || []).map((device) => device.deviceID));
+        const devices = (await App.ListDevices()).filter((device) => !registered.has(device.deviceId));
+        lanRegistrationList.innerHTML = '';
+        lanRegistration.hidden = devices.length === 0;
+        devices.forEach((device) => {
+            const item = document.createElement('li');
+            item.className = 'remote-device';
+            const name = document.createElement('span');
+            name.textContent = device.name || 'LAN Device';
+            const register = document.createElement('button');
+            register.className = 'btn btn-quiet';
+            register.textContent = '登记';
+            register.addEventListener('click', async () => {
+                try {
+                    handleRemoteSetup(await App.RegisterLANPairing(device.deviceId, device.name || 'LAN Device'));
+                } catch (err) {
+                    accountRemoteMessage.textContent = 'LAN Pairing 登记失败：' + err;
+                }
+            });
+            item.appendChild(name);
+            item.appendChild(register);
+            lanRegistrationList.appendChild(item);
+        });
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+function handleRemoteSetup(status) {
+    if (!status) return;
+    accountRemoteMessage.textContent = status.message || '';
+    const pending = status.state === 'pending';
+    const cancelFailed = status.state === 'cancel-failed';
+    accountRemoteSetup.hidden = !pending && !cancelFailed;
+    accountRemoteQR.hidden = !pending || !status.qr;
+    if (status.qr) accountRemoteQR.src = status.qr;
+    accountRemoteExpiry.textContent = pending && status.expiresAt
+        ? '此 QR 将于 ' + new Date(status.expiresAt).toLocaleTimeString() + ' 失效'
+        : '';
+    const start = document.getElementById('btn-account-remote-start');
+    start.textContent = pending ? '等待批准' : '设置';
+    start.disabled = !accountSignedIn || pending || cancelFailed;
+    document.getElementById('btn-account-remote-refresh').hidden = cancelFailed;
+    renderPairedDevices(status.devices);
+    renderLANRegistration(status.devices);
+    if (pending) startRemoteSetupPoll(); else stopRemoteSetupPoll();
+}
+
+function handleAccountStatus(status) {
+    accountSignedIn = status && status.state === 'signed-in';
+    document.getElementById('btn-account-sign-in').textContent = accountSignedIn ? 'Account 已登录' : '登录 Account';
+    document.getElementById('btn-account-sign-in').disabled = accountSignedIn;
+    document.getElementById('btn-account-remote-start').disabled = !accountSignedIn;
+    if (!accountSignedIn && status && status.message) accountRemoteMessage.textContent = status.message;
 }
 
 function handleRemote(s) {
     if (!s) return;
     remoteEnabled = !!s.enabled;
-    btnRemoteToggle.textContent = remoteEnabled ? '关闭' : '开启';
+    remoteEl.classList.toggle('remote-enabled', remoteEnabled);
+    btnRemoteToggle.textContent = remoteEnabled ? '关闭' : '手机远程';
     remoteDetail.hidden = !remoteEnabled;
     if (remoteEnabled) {
         const pairingUrl = s.url ? (s.url + '/?pair=' + s.pairingCode) : '';
@@ -161,10 +267,10 @@ function handleRemote(s) {
 
 function renderRemoteMeta(s) {
     remoteMeta.hidden = false;
-    const parts = [];
-    if (s.hostPublicKey) parts.push('Host 公钥: ' + s.hostPublicKey);
-    if (s.certFingerprint) parts.push('证书指纹: ' + s.certFingerprint);
-    remoteFp.textContent = parts.join(' · ') || '';
+    remoteHostKey.hidden = !s.hostPublicKey;
+    remoteCertFp.hidden = !s.certFingerprint;
+    remoteHostKey.textContent = s.hostPublicKey ? 'Host 公钥: ' + s.hostPublicKey : '';
+    remoteCertFp.textContent = s.certFingerprint ? '证书指纹: ' + s.certFingerprint : '';
     remoteAllowPrivileged.checked = !!s.allowPrivileged;
 }
 
@@ -216,6 +322,123 @@ async function renderDevices() {
     }
 }
 
+function typeLabel(t) {
+    switch (t) {
+        case 'question': return '提问';
+        case 'approval': return '待审批';
+        case 'completed': return '完成';
+        case 'error': return '报错';
+        default: return t || '通知';
+    }
+}
+
+function renderNotifications() {
+    notifyList.innerHTML = '';
+    const filtered = notifications.filter((n) => !notifyFilter || n.type === notifyFilter);
+    filtered.forEach((n) => {
+        const li = document.createElement('li');
+        li.className = 'notify-item' + (n.read ? ' is-read' : '');
+        const badge = document.createElement('span');
+        badge.className = 'notify-badge notify-badge-' + (n.type || '');
+        badge.textContent = typeLabel(n.type);
+        const text = document.createElement('span');
+        text.className = 'notify-text';
+        text.textContent = n.summary || '';
+        li.appendChild(badge);
+        li.appendChild(text);
+        li.addEventListener('click', () => {
+            n.read = true;
+            renderNotifications();
+            if (n.deepLink) showHarness(n.deepLink);
+        });
+        notifyList.appendChild(li);
+    });
+    if (filtered.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'notify-empty';
+        empty.textContent = '(暂无通知)';
+        notifyList.appendChild(empty);
+    }
+}
+
+function handleNotification(n) {
+    if (!n) return;
+    notifications.unshift(Object.assign({}, n, { read: false }));
+    notifications.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    if (notifications.length > 50) notifications.length = 50;
+    renderNotifications();
+    notifyEl.hidden = false;
+}
+
+function relayLabel(state) {
+    switch (state) {
+        case 'connecting': return '正在连接';
+        case 'online': return '在线';
+        case 'offline': return '离线';
+        default: return state || '离线';
+    }
+}
+
+function handleRelay(s) {
+    if (!s) return;
+    const el = document.getElementById('relay-status');
+    el.hidden = false;
+    const dot = document.getElementById('relay-status-dot');
+    dot.className = 'relay-status-dot relay-' + (s.state || 'offline');
+    const text = document.getElementById('relay-status-text');
+    text.textContent = s.message || ('Relay：' + relayLabel(s.state));
+}
+
+function entitlementLabel(state) {
+    switch (state) {
+        case 'active': return '已生效';
+        case 'grace': return '宽限期';
+        case 'expired': return '已过期';
+        case 'revoked': return '已撤销';
+        default: return '未知';
+    }
+}
+
+function handleEntitlement(s) {
+    if (!s) return;
+    const el = document.getElementById('entitlement-status');
+    el.hidden = false;
+    const dot = document.getElementById('entitlement-status-dot');
+    dot.className = 'entitlement-status-dot ent-' + (s.state || 'unknown');
+    const text = document.getElementById('entitlement-status-text');
+    const availability = s.relayAllowed ? ' · 公网可用' : ' · 公网不可用';
+    text.textContent = (s.message || ('订阅状态：' + entitlementLabel(s.state))) + availability;
+}
+
+function transportLabel(t) {
+    return t === 'relay' ? 'Relay' : (t === 'lan' ? 'LAN' : (t || '—'));
+}
+
+function handleDevices(list) {
+    const wrap = document.getElementById('active-devices');
+    const ul = document.getElementById('active-device-list');
+    if (!list || list.length === 0) {
+        wrap.hidden = true;
+        return;
+    }
+    wrap.hidden = false;
+    ul.innerHTML = '';
+    list.forEach((d) => {
+        const li = document.createElement('li');
+        li.className = 'remote-device';
+        const name = document.createElement('span');
+        name.textContent = (d.name || 'Device') + ' · ' + transportLabel(d.transport);
+        li.appendChild(name);
+        ul.appendChild(li);
+    });
+}
+
+function refreshRelayAndDevices() {
+    App.RelayStatus().then(handleRelay).catch(() => {});
+    App.ActiveDevices().then(handleDevices).catch(() => {});
+    App.EntitlementStatus().then(handleEntitlement).catch(() => {});
+}
+
 function handleStatus(s) {
     if (!s) return;
 
@@ -227,6 +450,7 @@ function handleStatus(s) {
             setReadyUI(true);
             document.getElementById('btn-enter').onclick = () => showHarness(s.url);
             App.RemoteStatus().then(handleRemote).catch((err) => console.error(err));
+            App.RemoteSetupStatus().then(handleRemoteSetup).catch((err) => console.error(err));
             break;
 
         case 'starting':
@@ -280,6 +504,40 @@ document.getElementById('btn-remote-regen').addEventListener('click', async () =
     }
 });
 
+document.getElementById('btn-account-remote-start').addEventListener('click', async () => {
+    try {
+        handleRemoteSetup(await App.StartRemoteSetup());
+    } catch (err) {
+        accountRemoteMessage.textContent = 'Remote setup 失败：' + err;
+    }
+});
+
+document.getElementById('btn-account-sign-in').addEventListener('click', async () => {
+    try {
+        handleAccountStatus(await App.SignInAccount());
+        if (accountSignedIn) handleRemoteSetup(await App.RemoteSetupStatus());
+    } catch (err) {
+        accountRemoteMessage.textContent = 'Account 登录失败：' + err;
+    }
+});
+
+document.getElementById('btn-account-remote-refresh').addEventListener('click', async () => {
+    try {
+        handleRemoteSetup(await App.RefreshRemoteSetup());
+    } catch (err) {
+        accountRemoteMessage.textContent = '刷新失败：' + err;
+    }
+});
+
+document.getElementById('btn-account-remote-cancel').addEventListener('click', async () => {
+    try {
+        handleRemoteSetup(await App.CancelRemoteSetup());
+    } catch (err) {
+        accountRemoteMessage.textContent = '已在本机取消；server 同步失败：' + err;
+        handleRemoteSetup(await App.RemoteSetupStatus());
+    }
+});
+
 remoteAllowPrivileged.addEventListener('change', async () => {
     try {
         await App.SetAllowPrivileged(remoteAllowPrivileged.checked);
@@ -304,13 +562,34 @@ document.getElementById('btn-remote-copy').addEventListener('click', async () =>
     }
 });
 
+document.getElementById('btn-notify-clear').addEventListener('click', () => {
+    notifications.length = 0;
+    renderNotifications();
+    notifyEl.hidden = true;
+});
+
+document.querySelectorAll('.notify-filter-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        notifyFilter = btn.dataset.type || '';
+        document.querySelectorAll('.notify-filter-btn').forEach((b) => b.classList.toggle('is-active', b === btn));
+        renderNotifications();
+    });
+});
+
 runtime.EventsOn('status', handleStatus);
 runtime.EventsOn('remote', handleRemote);
 runtime.EventsOn('dsh-update', renderUpdate);
+runtime.EventsOn('notifications', handleNotification);
+runtime.EventsOn('relay', handleRelay);
+runtime.EventsOn('devices', handleDevices);
+runtime.EventsOn('entitlement', handleEntitlement);
 App.Status().then(handleStatus).catch((err) => console.error(err));
+App.AccountStatus().then(handleAccountStatus).catch((err) => console.error(err));
 App.DSHVersion().then((v) => { updateCurrent.textContent = v || '—'; }).catch(() => {});
+refreshRelayAndDevices();
+window.setInterval(refreshRelayAndDevices, 10000);
 
-window.addEventListener('focus', refreshHarnessLayer);
+window.addEventListener('focus', () => { refreshHarnessLayer(); refreshRelayAndDevices(); });
 window.addEventListener('pageshow', refreshHarnessLayer);
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') refreshHarnessLayer();
