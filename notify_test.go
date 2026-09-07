@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -104,23 +106,17 @@ func TestClassifyQuestionAndApproval(t *testing.T) {
 func TestSubscribeEmitsNotifications(t *testing.T) {
 	upgrader := websocket.Upgrader{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/events.mux", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/remote.mux", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
 		}
 		defer c.Close()
-		_ = c.WriteMessage(websocket.TextMessage, testFrame("question/requested", `{"type":"question/requested","sessionId":"s1","questions":[{"id":"q1","question":"hi"}]}`))
-		_ = c.WriteMessage(websocket.TextMessage, testFrame("approval/requested", `{"type":"approval/requested","sessionId":"s1","toolName":"bash"}`))
+		_, _, _ = c.ReadMessage()
+		_ = c.WriteMessage(websocket.TextMessage, muxItem(`{"type":"ready","clientId":"c1","host":{"home":"/tmp"}}`))
+		_ = c.WriteMessage(websocket.TextMessage, muxItem(`{"type":"waterfall","event":"user-questions/request","eventId":"q1","agentId":"s1","request":{"questions":[{"id":"q1","question":"hi"}]}}`))
+		_ = c.WriteMessage(websocket.TextMessage, muxItem(`{"type":"waterfall","event":"approval/request","eventId":"a1","agentId":"s1","request":{"toolName":"bash"}}`))
 		time.Sleep(200 * time.Millisecond)
-	})
-	mux.HandleFunc("/api/events.host", func(w http.ResponseWriter, r *http.Request) {
-		c, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer c.Close()
-		time.Sleep(300 * time.Millisecond)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -155,28 +151,76 @@ func TestSubscribeEmitsNotifications(t *testing.T) {
 	}
 }
 
+func TestSubscribeThroughAuthenticatedEmbeddedProxy(t *testing.T) {
+	upgrader := websocket.Upgrader{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("token") == "one-time" {
+			http.SetCookie(w, &http.Cookie{Name: "dsh-auth-test", Value: "session", Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		if _, err := r.Cookie("dsh-auth-test"); err != nil {
+			http.Error(w, "authentication required", http.StatusUnauthorized)
+			return
+		}
+		_, _ = fmt.Fprint(w, "ok")
+	})
+	mux.HandleFunc("/api/remote.mux", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := r.Cookie("dsh-auth-test"); err != nil {
+			http.Error(w, "authentication required", http.StatusUnauthorized)
+			return
+		}
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		_, _, _ = c.ReadMessage()
+		_ = c.WriteMessage(websocket.TextMessage, muxItem(`{"type":"waterfall","event":"user-questions/request","eventId":"auth-q1","agentId":"auth-s1","request":{"questions":[{"id":"q1","question":"hi"}]}}`))
+		time.Sleep(300 * time.Millisecond)
+	})
+	upstream := httptest.NewServer(mux)
+	t.Cleanup(upstream.Close)
+	authenticatedURL, err := url.Parse(upstream.URL + "/?token=one-time")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy, err := newEmbeddedProxy(context.Background(), authenticatedURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proxy.Close)
+
+	n := newNotifyManager(nil)
+	n.sink = make(chan Notification, 4)
+	n.start(proxy.URL)
+	t.Cleanup(n.stop)
+	select {
+	case got := <-n.sink:
+		if got.SessionID != "auth-s1" {
+			t.Fatalf("sessionId = %q, want auth-s1", got.SessionID)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("authenticated notification websocket did not connect")
+	}
+}
+
 func TestDedupReplayedFrames(t *testing.T) {
 	upgrader := websocket.Upgrader{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/events.mux", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/remote.mux", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
 		}
 		defer c.Close()
-		// Same rpcId emitted twice, as dsh replays still-pending frames on reconnect.
-		frame := []byte(`{"type":"server-request","rpcId":"r1","method":"question/requested","payload":{"type":"question/requested","sessionId":"s1","questions":[{"id":"q1","question":"hi"}]}}`)
+		_, _, _ = c.ReadMessage()
+		// Same eventId emitted twice, as dsh can replay a still-pending waterfall.
+		frame := muxItem(`{"type":"waterfall","event":"user-questions/request","eventId":"r1","agentId":"s1","request":{"questions":[{"id":"q1","question":"hi"}]}}`)
 		_ = c.WriteMessage(websocket.TextMessage, frame)
 		_ = c.WriteMessage(websocket.TextMessage, frame)
 		time.Sleep(200 * time.Millisecond)
-	})
-	mux.HandleFunc("/api/events.host", func(w http.ResponseWriter, r *http.Request) {
-		c, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer c.Close()
-		time.Sleep(300 * time.Millisecond)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -208,7 +252,7 @@ func TestReconnectAfterDrop(t *testing.T) {
 	var mu sync.Mutex
 	var connCount int
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/events.mux", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/remote.mux", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
@@ -217,23 +261,16 @@ func TestReconnectAfterDrop(t *testing.T) {
 		connCount++
 		n := connCount
 		mu.Unlock()
+		_, _, _ = c.ReadMessage()
 		if n == 1 {
-			_ = c.WriteMessage(websocket.TextMessage, []byte(`{"type":"server-request","rpcId":"a","method":"question/requested","payload":{"type":"question/requested","sessionId":"s1","questions":[{"id":"q1","question":"first"}]}}`))
+			_ = c.WriteMessage(websocket.TextMessage, muxItem(`{"type":"waterfall","event":"user-questions/request","eventId":"a","agentId":"s1","request":{"questions":[{"id":"q1","question":"first"}]}}`))
 			time.Sleep(50 * time.Millisecond)
 			_ = c.Close()
 			return
 		}
 		defer c.Close()
-		_ = c.WriteMessage(websocket.TextMessage, []byte(`{"type":"server-request","rpcId":"b","method":"question/requested","payload":{"type":"question/requested","sessionId":"s2","questions":[{"id":"q2","question":"second"}]}}`))
+		_ = c.WriteMessage(websocket.TextMessage, muxItem(`{"type":"waterfall","event":"user-questions/request","eventId":"b","agentId":"s2","request":{"questions":[{"id":"q2","question":"second"}]}}`))
 		time.Sleep(300 * time.Millisecond)
-	})
-	mux.HandleFunc("/api/events.host", func(w http.ResponseWriter, r *http.Request) {
-		c, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer c.Close()
-		time.Sleep(600 * time.Millisecond)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -261,4 +298,6 @@ func TestReconnectAfterDrop(t *testing.T) {
 	}
 }
 
-var _ = sync.Mutex{}
+func muxItem(value string) []byte {
+	return []byte(`{"type":"item","streamId":"` + notifyMuxStreamID + `","value":` + value + `}`)
+}

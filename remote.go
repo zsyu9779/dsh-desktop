@@ -207,6 +207,12 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	targetOrigin := targetURL.Scheme + "://" + targetURL.Host
+	targetUsername := ""
+	targetPassword := ""
+	if targetURL.User != nil {
+		targetUsername = targetURL.User.Username()
+		targetPassword, _ = targetURL.User.Password()
+	}
 	baseDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		baseDirector(req)
@@ -214,6 +220,9 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 		// (the wire Host header) untouched; force it to loopback so dsh's
 		// /api trust fence accepts the request.
 		req.Host = targetURL.Host
+		if targetUsername != "" {
+			req.SetBasicAuth(targetUsername, targetPassword)
+		}
 		// Prefer uncompressed HTML so our polyfill injection never lands on
 		// compressed bytes; we still handle gzip defensively in ModifyResponse.
 		req.Header.Set("Accept-Encoding", "identity")
@@ -272,7 +281,9 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 	r.pairingCode = code
 	r.pairingExpiry = time.Now().Add(pairingCodeTTL)
 	r.port = port
-	r.target = target
+	safeTarget := *targetURL
+	safeTarget.User = nil
+	r.target = safeTarget.String()
 	r.certFingerprint = fingerprint
 	r.server = server
 
@@ -288,7 +299,7 @@ func (r *remoteManager) enable(target string) (remoteStatus, error) {
 		}
 	}()
 
-	r.logf("remote enabled: https://0.0.0.0:%d -> %s (cert=%s, pairing=%s)", port, target, fingerprint, code)
+	r.logf("remote enabled: https://0.0.0.0:%d -> %s (cert=%s, pairing=%s)", port, safeTarget.String(), fingerprint, code)
 	return r.buildStatusLocked(), nil
 }
 

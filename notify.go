@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -68,6 +69,23 @@ type agentErrorFrame struct {
 	Type      string
 	SessionID string
 	Message   string
+}
+
+const notifyMuxStreamID = "dsh-desktop-notify"
+
+type gatewayMuxFrame struct {
+	Type     string          `json:"type"`
+	StreamID string          `json:"streamId"`
+	Value    json.RawMessage `json:"value"`
+}
+
+type forwardedEventFrame struct {
+	Type    string            `json:"type"`
+	Event   string            `json:"event"`
+	EventID string            `json:"eventId"`
+	AgentID string            `json:"agentId"`
+	Args    []json.RawMessage `json:"args"`
+	Request json.RawMessage   `json:"request"`
 }
 
 // classifyFrame parses one server-request frame and returns a Notification if
@@ -171,6 +189,70 @@ func classifyFrame(raw []byte) (n Notification, ok bool) {
 	}
 }
 
+// classifyMuxFrame unwraps DSH 0.1.2's /api/remote.mux carrier and maps the
+// forwarded application events that matter to desktop notifications.
+func classifyMuxFrame(raw []byte) (n Notification, ok, terminal bool) {
+	var mux gatewayMuxFrame
+	if err := json.Unmarshal(raw, &mux); err != nil || mux.StreamID != notifyMuxStreamID {
+		return Notification{}, false, false
+	}
+	if mux.Type == "end" || mux.Type == "error" {
+		return Notification{}, false, true
+	}
+	if mux.Type != "item" || len(mux.Value) == 0 {
+		return Notification{}, false, false
+	}
+	var event forwardedEventFrame
+	if err := json.Unmarshal(mux.Value, &event); err != nil || event.Type == "ready" {
+		return Notification{}, false, false
+	}
+	switch event.Type + ":" + event.Event {
+	case "emit:api-session/status":
+		var sessionID string
+		var running bool
+		if len(event.Args) != 2 || json.Unmarshal(event.Args[0], &sessionID) != nil || json.Unmarshal(event.Args[1], &running) != nil || running {
+			return Notification{}, false, false
+		}
+		return Notification{Type: "completed", SessionID: sessionID, Summary: "任务已完成", DedupeKey: event.EventID}, true, false
+	case "emit:api-session/error":
+		var sessionID, message string
+		if len(event.Args) != 2 || json.Unmarshal(event.Args[0], &sessionID) != nil || json.Unmarshal(event.Args[1], &message) != nil {
+			return Notification{}, false, false
+		}
+		if message == "" {
+			message = "任务出错"
+		}
+		return Notification{Type: "error", SessionID: sessionID, Summary: message, DedupeKey: event.EventID}, true, false
+	case "waterfall:approval/request":
+		var request struct {
+			ToolName string `json:"toolName"`
+			Reason   string `json:"reason"`
+		}
+		if json.Unmarshal(event.Request, &request) != nil {
+			return Notification{}, false, false
+		}
+		summary := request.ToolName + " 请求授权"
+		if request.ToolName == "" {
+			summary = "工具请求授权"
+		}
+		return Notification{Type: "approval", SessionID: event.AgentID, Summary: summary, DedupeKey: event.EventID}, true, false
+	case "waterfall:user-questions/request":
+		var request struct {
+			Questions []questionItem `json:"questions"`
+		}
+		if json.Unmarshal(event.Request, &request) != nil || len(request.Questions) == 0 {
+			return Notification{}, false, false
+		}
+		typ := "question"
+		if request.Questions[0].Intent != nil && request.Questions[0].Intent.Kind == "plan-review" {
+			typ = "approval"
+		}
+		return Notification{Type: typ, SessionID: event.AgentID, Summary: request.Questions[0].Question, DedupeKey: event.EventID}, true, false
+	default:
+		return Notification{}, false, false
+	}
+}
+
 // maxSeenDedupe bounds the in-memory set of recently emitted dedupe keys.
 const maxSeenDedupe = 256
 
@@ -211,12 +293,10 @@ func (n *notifyManager) start(baseURL string) {
 	n.baseURL = baseURL
 	n.mu.Unlock()
 
-	for _, p := range []string{"/api/events.mux", "/api/events.host"} {
-		go n.subscribe(baseURL, p)
-	}
+	go n.subscribe(baseURL)
 }
 
-func (n *notifyManager) subscribe(baseURL, path string) {
+func (n *notifyManager) subscribe(baseURL string) {
 	backoff := 500 * time.Millisecond
 	const maxBackoff = 30 * time.Second
 
@@ -224,14 +304,19 @@ func (n *notifyManager) subscribe(baseURL, path string) {
 		if !n.isRunning() {
 			return
 		}
-		wsURL, err := wsURLFor(baseURL, path)
+		wsURL, err := wsURLFor(baseURL, "/api/remote.mux")
 		if err != nil {
 			n.logf("notify: %v", err)
 			return
 		}
-		c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		authHeader, err := websocketAuthHeader(baseURL)
 		if err != nil {
-			n.logf("notify: dial %s: %v (retry in %v)", path, err, backoff)
+			n.logf("notify: %v", err)
+			return
+		}
+		c, _, err := websocket.DefaultDialer.Dial(wsURL, authHeader)
+		if err != nil {
+			n.logf("notify: dial /api/remote.mux: %v (retry in %v)", err, backoff)
 			if !n.sleepOrStop(backoff) {
 				return
 			}
@@ -250,6 +335,15 @@ func (n *notifyManager) subscribe(baseURL, path string) {
 		}
 		n.conns = append(n.conns, c)
 		n.mu.Unlock()
+		if err := c.WriteJSON(map[string]any{
+			"type":     "open",
+			"streamId": notifyMuxStreamID,
+			"endpoint": "$events",
+			"payload":  map[string]any{"args": map[string]any{}},
+		}); err != nil {
+			_ = c.Close()
+			continue
+		}
 
 		// A successful connect resets the backoff for the next failure.
 		backoff = 500 * time.Millisecond
@@ -259,7 +353,9 @@ func (n *notifyManager) subscribe(baseURL, path string) {
 			if err != nil {
 				break
 			}
-			if notif, ok := classifyFrame(msg); ok {
+			if notif, ok, terminal := classifyMuxFrame(msg); terminal {
+				break
+			} else if ok {
 				n.emit(notif)
 			}
 		}
@@ -381,4 +477,20 @@ func wsURLFor(baseURL, path string) (string, error) {
 		scheme = "wss"
 	}
 	return scheme + "://" + u.Host + path, nil
+}
+
+// websocketAuthHeader carries the embedded proxy capability explicitly.
+// gorilla/websocket deliberately does not infer Basic Auth from URL userinfo.
+func websocketAuthHeader(baseURL string) (http.Header, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("bad base url %q: %w", baseURL, err)
+	}
+	header := http.Header{}
+	if u.User != nil {
+		password, _ := u.User.Password()
+		request := &http.Request{Header: header}
+		request.SetBasicAuth(u.User.Username(), password)
+	}
+	return header, nil
 }

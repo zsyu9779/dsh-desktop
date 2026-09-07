@@ -194,7 +194,11 @@ func (u *dshRelayUpstream) openStream(ctx context.Context, method string) (relay
 	if err != nil {
 		return nil, err
 	}
-	connection, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL, nil)
+	authHeader, err := websocketAuthHeader(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	connection, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL, authHeader)
 	if err != nil {
 		return nil, err
 	}

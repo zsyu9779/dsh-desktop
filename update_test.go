@@ -72,6 +72,7 @@ func TestSetDSHVersionValidation(t *testing.T) {
 	configPath = filepath.Join(stateDir(), "config.json")
 
 	a := NewApp() // nil ctx: no events emitted
+	t.Cleanup(a.dsh.stop)
 	if err := a.SetDSHVersion("not-a-version"); err == nil {
 		t.Fatal("expected error for invalid version")
 	}

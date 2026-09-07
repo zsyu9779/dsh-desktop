@@ -14,7 +14,16 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
     const react = require("react");
     const jsx = require("react/jsx-runtime");
-    const runtime_client = require("@deepseek-ai/dsh-client-runtime/client");
+    function isAppendSurfaceEvent(event) {
+      return ["user/message", "assistant/message", "tool/result"].includes(event?.type) && event.surfaceOp === "append";
+    }
+    function isWindowsStylePath(value) {
+      return /^[A-Za-z]:[/\\]/.test(value) || value.startsWith("\\\\");
+    }
+    function resolveWorkspacePath(cwd, path) {
+      if (path.startsWith("/") || isWindowsStylePath(path) || !cwd) return path;
+      return `${cwd.replace(/[/\\]+$/, "")}/${path.replace(/^[/\\]+/, "")}`;
+    }
     const primitives = require("@deepseek-ai/dsh-client-ui-primitives");
 
     const NS = "fileChanges";
@@ -79,7 +88,7 @@ window.__ModuleLoader__.load({
       match: (event) => {
         if (event.type === "turn/start") return { id: String(event.data.turn), role: "start" };
         if (event.type === "tool/call") return { id: String(event.data.turn), role: "update" };
-        if (event.type === "tool/result" && runtime_client.isAppendSurfaceEvent(event)) {
+        if (event.type === "tool/result" && isAppendSurfaceEvent(event)) {
           return { id: String(event.data.turn), role: "update" };
         }
         return null;
@@ -128,7 +137,7 @@ window.__ModuleLoader__.load({
       fetch("/api/file-changes/reveal", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: runtime_client.resolveWorkspacePath(cwd, path) }),
+        body: JSON.stringify({ path: resolveWorkspacePath(cwd, path) }),
       }).catch(() => {});
     }
 
@@ -230,11 +239,11 @@ window.__ModuleLoader__.load({
       document.head.appendChild(tag);
     }
 
-    const inject = ["slots", "locale", "conversationEvents", "sessions", "connection"];
+    const inject = ["slots", "locale", "uiConversation", "sessions", "connection"];
     function apply(ctx) {
       const connection = ctx.get("connection");
       const sessions = ctx.get("sessions");
-      ctx.conversationEvents.register(definition);
+      ctx.uiConversation.events.register(definition);
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-file-changes: dictionaries");
       ctx.slots.inject("conversation.chat.turnTail", () =>
         ctx.slots.register(

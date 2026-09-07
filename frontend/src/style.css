@@ -277,6 +277,10 @@ body {
 }
 
 .remote {
+    position: absolute;
+    z-index: 20;
+    top: 20px;
+    right: 20px;
     width: min(440px, 100%);
     padding: 18px;
     border: 1px solid var(--border);
@@ -286,6 +290,36 @@ body {
     flex-direction: column;
     gap: 14px;
     align-items: center;
+}
+
+#remote:not(.remote-enabled) {
+    width: auto;
+    padding: 0;
+    border-radius: 12px;
+    background: rgba(13, 17, 28, 0.86);
+    backdrop-filter: blur(12px);
+}
+
+#remote:not(.remote-enabled) .remote-title,
+#remote:not(.remote-enabled) .remote-hint {
+    display: none;
+}
+
+#remote:not(.remote-enabled) .btn {
+    padding: 9px 14px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#remote.remote-enabled {
+    max-height: calc(100% - 40px);
+    overflow: auto;
+    background: rgba(13, 17, 28, 0.96);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+
+.account-remote {
+    position: static;
 }
 
 .remote-head {

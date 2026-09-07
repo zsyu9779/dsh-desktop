@@ -245,7 +245,8 @@ function handleAccountStatus(status) {
 function handleRemote(s) {
     if (!s) return;
     remoteEnabled = !!s.enabled;
-    btnRemoteToggle.textContent = remoteEnabled ? '关闭' : '开启';
+    remoteEl.classList.toggle('remote-enabled', remoteEnabled);
+    btnRemoteToggle.textContent = remoteEnabled ? '关闭' : '手机远程';
     remoteDetail.hidden = !remoteEnabled;
     if (remoteEnabled) {
         const pairingUrl = s.url ? (s.url + '/?pair=' + s.pairingCode) : '';

@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-diff-review",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Codex-style diff review for DeepSeek Harness: review every uncommitted change of the current project (staged, unstaged and untracked), inspect per-file unified diffs, and accept (stage) or revert (discard) changes — one file at a time or all at once.",
   "contributors": [
     "Civitasv"
@@ -31,7 +31,7 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-connection",
-        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-store",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-conversation",
@@ -80,7 +80,7 @@
   "devDependencies": {
     "@deepseek-ai/dsh-attachment": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-store": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-client-ui-conversation": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-client-ui-layout": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-client-ui-settings": "^0.1.0-rc.6",

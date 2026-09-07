@@ -84,6 +84,67 @@ func TestPreinstalledClientBundlesRegisterPackageName(t *testing.T) {
 	}
 }
 
+func TestPreinstalledClientBundlesDoNotUseRemovedRuntimeModule(t *testing.T) {
+	const removedModule = "@deepseek-ai/dsh-client-runtime"
+
+	for _, plugin := range preinstalledPlugins {
+		t.Run(plugin.Name, func(t *testing.T) {
+			packageJSON, err := fs.ReadFile(pluginsFS, filepath.ToSlash(filepath.Join("plugins", plugin.Dir, "package.json")))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var manifest struct {
+				Exports map[string]json.RawMessage `json:"exports"`
+				DSH     struct {
+					Client struct {
+						Inject []string `json:"inject"`
+					} `json:"client"`
+				} `json:"dsh"`
+			}
+			if err := json.Unmarshal(packageJSON, &manifest); err != nil {
+				t.Fatal(err)
+			}
+			for _, dependency := range manifest.DSH.Client.Inject {
+				if dependency == removedModule {
+					t.Fatalf("manifest still injects removed module %q", removedModule)
+				}
+			}
+
+			clientExport := manifest.Exports["./client"]
+			var clientPath string
+			if err := json.Unmarshal(clientExport, &clientPath); err != nil {
+				var conditions map[string]string
+				if err := json.Unmarshal(clientExport, &conditions); err != nil {
+					t.Fatalf("decode ./client export: %v", err)
+				}
+				clientPath = conditions["default"]
+			}
+			bundle, err := fs.ReadFile(pluginsFS, filepath.ToSlash(filepath.Join("plugins", plugin.Dir, strings.TrimPrefix(clientPath, "./"))))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(bundle), removedModule) {
+				t.Fatalf("client bundle still imports removed module %q", removedModule)
+			}
+		})
+	}
+}
+
+func TestFileChangesUsesCurrentConversationService(t *testing.T) {
+	bundle, err := fs.ReadFile(pluginsFS, "plugins/file-changes/lib/client.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(bundle)
+	if strings.Contains(contents, `"conversationEvents"`) || strings.Contains(contents, "ctx.conversationEvents") {
+		t.Fatal("file-changes still depends on the removed conversationEvents root service")
+	}
+	if !strings.Contains(contents, `"uiConversation"`) || !strings.Contains(contents, "ctx.uiConversation.events.register") {
+		t.Fatal("file-changes does not register through the current uiConversation service")
+	}
+}
+
 func TestRunPreinstallInstallsAndIsIdempotent(t *testing.T) {
 	dshHome := t.TempDir()
 	t.Setenv("DSH_HOME", dshHome)

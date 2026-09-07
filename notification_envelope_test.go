@@ -287,24 +287,17 @@ func TestBridgeFansOutAtDedupeGate(t *testing.T) {
 
 	upgrader := websocket.Upgrader{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/events.mux", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/remote.mux", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
 		}
 		defer c.Close()
-		frame := []byte(`{"type":"server-request","rpcId":"r1","method":"question/requested","payload":{"type":"question/requested","sessionId":"s1","questions":[{"id":"q1","question":"hi"}]}}`)
+		_, _, _ = c.ReadMessage()
+		frame := muxItem(`{"type":"waterfall","event":"user-questions/request","eventId":"r1","agentId":"s1","request":{"questions":[{"id":"q1","question":"hi"}]}}`)
 		_ = c.WriteMessage(websocket.TextMessage, frame)
 		_ = c.WriteMessage(websocket.TextMessage, frame) // 重放
 		time.Sleep(200 * time.Millisecond)
-	})
-	mux.HandleFunc("/api/events.host", func(w http.ResponseWriter, r *http.Request) {
-		c, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer c.Close()
-		time.Sleep(300 * time.Millisecond)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()

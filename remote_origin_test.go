@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -14,9 +16,24 @@ import (
 // loopback target) plus the JWT cookie. If this fails, the phone's real-time
 // stream is broken by the Origin rewrite.
 func TestReverseProxyWSWithBrowserOrigin(t *testing.T) {
+	upgrader := websocket.Upgrader{}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/events.mux" {
+			_, _ = io.WriteString(w, "ok")
+			return
+		}
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		_ = c.WriteMessage(websocket.TextMessage, []byte("origin-ok"))
+	}))
+	t.Cleanup(upstream.Close)
+
 	t.Setenv(stateDirEnv, t.TempDir())
 	m := newRemoteManager(nil)
-	if _, err := m.enable("http://127.0.0.1:49873"); err != nil {
+	if _, err := m.enable(upstream.URL); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
 	t.Cleanup(m.disable)
