@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// sseUpstream mimics dsh's /api/events.mux: every connected client is
+// sseUpstream mimics dsh's /api/remote.mux: every connected client is
 // registered and receives every broadcast event in real time.
 type sseUpstream struct {
 	mu      sync.Mutex
@@ -20,7 +20,7 @@ type sseUpstream struct {
 
 func (u *sseUpstream) handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/events.mux" {
+		if r.URL.Path == "/api/remote.mux" {
 			u.serveSSE(w, r)
 			return
 		}
@@ -145,7 +145,7 @@ func TestReverseProxySSEBroadcastToMultipleClients(t *testing.T) {
 	}
 
 	open := func() *sseReader {
-		req, _ := http.NewRequest("GET", base+"/api/events.mux", nil)
+		req, _ := http.NewRequest("GET", base+"/api/remote.mux", nil)
 		req.AddCookie(&http.Cookie{Name: remoteCookieName, Value: jwt})
 		r, err := client.Do(req)
 		if err != nil {

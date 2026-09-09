@@ -22,15 +22,27 @@ import (
 // the desktop WebView. The upstream session cookie stays in the Go process, so
 // WKWebView never needs to accept a SameSite=Strict cookie inside an iframe.
 type embeddedProxy struct {
-	URL      string
-	listener net.Listener
-	server   *http.Server
-	close    sync.Once
-	first    sync.Once
-	firstHit chan struct{}
+	// URL is the Go-facing base URL. Its userinfo is a credential carrier for
+	// in-process clients (the LAN proxy, notify, relay) that can forward Basic
+	// auth; a browser cannot, so the WebView must use BrowserURL instead.
+	URL string
+	// BrowserURL is what the WebView loads: the same origin with the capability
+	// as a query parameter. Browsers block subresource URLs carrying userinfo
+	// (Chromium refuses the request; WebKit strips the header), so a credentialed
+	// URL silently fails to authenticate an iframe.
+	BrowserURL string
+	listener   net.Listener
+	server     *http.Server
+	close      sync.Once
+	first      sync.Once
+	firstHit   chan struct{}
 }
 
 const embeddedProxyCookieName = "dsh_desktop_embed"
+
+// embeddedProxyCapabilityQuery carries the loopback capability in the browser
+// URL, where userinfo is not an option.
+const embeddedProxyCapabilityQuery = "dshcap"
 
 func newEmbeddedProxy(ctx context.Context, authenticatedURL *url.URL) (*embeddedProxy, error) {
 	if err := validateUpstreamURL(authenticatedURL); err != nil {
@@ -74,13 +86,16 @@ func newEmbeddedProxy(ctx context.Context, authenticatedURL *url.URL) (*embedded
 	target := &url.URL{Scheme: authenticatedURL.Scheme, Host: authenticatedURL.Host}
 	publicOrigin := "http://" + publicHost
 	publicURL := &url.URL{Scheme: "http", Host: publicHost, Path: "/", User: url.UserPassword("dsh", capability)}
+	browserURL := &url.URL{Scheme: "http", Host: publicHost, Path: "/"}
+	browserURL.RawQuery = url.Values{embeddedProxyCapabilityQuery: {capability}}.Encode()
 	targetOrigin := target.Scheme + "://" + target.Host
 	var claimed atomic.Bool
 
 	p := &embeddedProxy{
-		URL:      publicURL.String(),
-		listener: listener,
-		firstHit: make(chan struct{}),
+		URL:        publicURL.String(),
+		BrowserURL: browserURL.String(),
+		listener:   listener,
+		firstHit:   make(chan struct{}),
 	}
 
 	reverseProxy := httputil.NewSingleHostReverseProxy(target)
@@ -129,6 +144,11 @@ func newEmbeddedProxy(ctx context.Context, authenticatedURL *url.URL) (*embedded
 		validUser := subtle.ConstantTimeCompare([]byte(username), []byte("dsh")) == 1
 		validPassword := subtle.ConstantTimeCompare([]byte(password), []byte(capability)) == 1
 		validBasicAuth := ok && validUser && validPassword
+		// The WebView presents the capability in the query because it cannot
+		// present Basic auth from a subresource URL.
+		validQueryCapability := subtle.ConstantTimeCompare(
+			[]byte(req.URL.Query().Get(embeddedProxyCapabilityQuery)), []byte(capability)) == 1
+		validCredential := validBasicAuth || validQueryCapability
 		cookie, cookieErr := req.Cookie(embeddedProxyCookieName)
 		validCookie := cookieErr == nil && subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(capability)) == 1
 		crossOrigin := isCrossOriginProxyRequest(req, publicOrigin)
@@ -137,15 +157,15 @@ func newEmbeddedProxy(ctx context.Context, authenticatedURL *url.URL) (*embedded
 		// loopback listener, allow requests without an explicit foreign origin.
 		// An explicit cross-origin request is still rejected, even if the browser
 		// happens to attach our local cookie.
-		if !validBasicAuth && (crossOrigin || !validCookie && !claimed.Load()) {
+		if !validCredential && (crossOrigin || !validCookie && !claimed.Load()) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="dsh-desktop", charset="UTF-8"`)
 			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return
 		}
-		if validBasicAuth {
+		if validCredential {
 			claimed.Store(true)
 		}
-		if validBasicAuth && !validCookie {
+		if validCredential && !validCookie {
 			http.SetCookie(w, &http.Cookie{
 				Name:     embeddedProxyCookieName,
 				Value:    capability,

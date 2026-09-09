@@ -61,8 +61,8 @@ func TestPreinstalledPluginRouteForbiddenOverRemote(t *testing.T) {
 		}
 	}
 
-	// A paired request to an unrelated route still passes through.
-	resp := authedReq(t, base, jwt, "/api/session.list")
+	// A paired request to an allowlisted route still passes through.
+	resp := authedReq(t, base, jwt, "/api/session/list")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("non-plugin route status = %d, want 200", resp.StatusCode)
 	}

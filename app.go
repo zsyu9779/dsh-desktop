@@ -54,7 +54,7 @@ func NewApp() *App {
 	a.relay = newRelayHost(
 		relayIdentity,
 		newWebsocketRelayHostConnector(relayServerURL()),
-		newDSHRelayUpstream(func() string { return a.dsh.current().URL }),
+		newDSHRelayUpstream(func() string { return a.dsh.internalURL() }),
 	)
 	// 通知桥复用 Host Relay 身份：去重后的 Notification 派生为面向每个目标 Device
 	// 的加密 envelope（投递由 dsh-server 侧 ticket 21 与跨仓 harness ticket 24 负责）。
@@ -332,7 +332,7 @@ func (a *App) RegisterLANPairing(deviceID, deviceName string) (remoteSetupStatus
 
 // EnableRemote starts the authenticated LAN proxy for phone remote control.
 func (a *App) EnableRemote() (remoteStatus, error) {
-	s, err := a.remote.enable(a.dsh.current().URL)
+	s, err := a.remote.enable(a.dsh.internalURL())
 	if err != nil {
 		return s, err
 	}

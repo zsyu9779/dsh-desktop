@@ -36,8 +36,8 @@ func TestPinnedDSHPackageUsesConfigOverride(t *testing.T) {
 	if got := pinnedDSHPackage(); got != dshPackage {
 		t.Fatalf("expected default pin %q, got %q", dshPackage, got)
 	}
-	if got := currentDSHVersion(); got != "0.1.1-rc.2" {
-		t.Fatalf("expected current version 0.1.1-rc.2, got %q", got)
+	if got := currentDSHVersion(); got != "0.1.2-rc.1" {
+		t.Fatalf("expected current version 0.1.2-rc.1, got %q", got)
 	}
 
 	// Config override wins.

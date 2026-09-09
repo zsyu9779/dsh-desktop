@@ -17,28 +17,63 @@ func authedReq(t *testing.T, base, jwt, path string) *http.Response {
 	return resp
 }
 
-func TestPrivilegedMethodDefaultForbidden(t *testing.T) {
+func TestRemoteScopeDeniesUnlistedEndpoints(t *testing.T) {
 	m, base := newTestRemote(t)
 	jwt := pairJWT(t, m, base)
 
-	resp := authedReq(t, base, jwt, "/api/settings.update")
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("privileged default status = %d, want 403", resp.StatusCode)
-	}
-
-	resp2 := authedReq(t, base, jwt, "/api/session.list")
-	if resp2.StatusCode != http.StatusOK {
-		t.Fatalf("non-privileged status = %d, want 200", resp2.StatusCode)
+	// DSH 0.1.2 removed the upstream privileged-method list, so the shell owns
+	// the policy. Everything outside the allowlist is refused, including a
+	// namespace a future release adds.
+	for _, path := range []string{
+		"/api/settings/describe",
+		"/api/credentials/describe",
+		"/api/agentPresets/read",
+		"/api/directoryPicker/pick",
+		"/api/dynamicCordisRunner/invoke",
+		"/api/pluginInventory/list",
+		"/api/llm/discoverModels",
+		"/api/session/openWorkspacePath",
+		"/api/workspaceFiles/read",
+		"/api/subagents/prompt",
+		"/api/brandnew/endpoint",
+	} {
+		if resp := authedReq(t, base, jwt, path); resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("%s status = %d, want 403", path, resp.StatusCode)
+		}
 	}
 }
 
-func TestPrivilegedMethodAllowedAfterGrant(t *testing.T) {
+func TestRemoteScopeAllowsListedEndpoints(t *testing.T) {
+	m, base := newTestRemote(t)
+	jwt := pairJWT(t, m, base)
+
+	for _, path := range []string{
+		"/api/session/list",
+		"/api/session/prompt",
+		"/api/session/uploadFileBinary",
+		"/api/workspace/create",
+		"/api/directoryPicker/list",
+		"/api/agentPresets/list",
+		"/api/llm/listProviders",
+		"/api/goals/get",
+		"/api/remote.mux",
+		"/api/$events/result",
+		"/assets/app.js",
+	} {
+		if resp := authedReq(t, base, jwt, path); resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, resp.StatusCode)
+		}
+	}
+}
+
+func TestRemoteScopeGrantAllowsEverything(t *testing.T) {
 	m, base := newTestRemote(t)
 	jwt := pairJWT(t, m, base)
 	m.setAllowPrivileged(true)
 
-	resp := authedReq(t, base, jwt, "/api/settings.update")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("privileged after grant status = %d, want 200", resp.StatusCode)
+	for _, path := range []string{"/api/settings/describe", "/api/dynamicCordisRunner/invoke"} {
+		if resp := authedReq(t, base, jwt, path); resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s after grant status = %d, want 200", path, resp.StatusCode)
+		}
 	}
 }

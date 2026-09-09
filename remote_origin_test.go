@@ -59,7 +59,7 @@ func TestReverseProxyWSWithBrowserOrigin(t *testing.T) {
 		t.Fatal("no dsh_remote cookie on pairing")
 	}
 
-	wsURL := "wss" + base[len("https"):] + "/api/events.mux"
+	wsURL := "wss" + base[len("https"):] + "/api/remote.mux"
 	dialer := websocket.Dialer{
 		TLSClientConfig: client.Transport.(*http.Transport).TLSClientConfig,
 	}

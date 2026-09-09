@@ -25,7 +25,10 @@ import (
 const (
 	// dshPackage is the pinned upstream DeepSeek Harness release. Bump this to
 	// track a newer release, or set DSH_COMMAND to override the launcher entirely.
-	dshPackage = "@deepseek-ai/dsh@0.1.1-rc.2"
+	// 0.1.2 introduced the browser-authentication URL line and the Remote
+	// namespace split the shipped plugins are built against, so the pin and the
+	// plugins must move together.
+	dshPackage = "@deepseek-ai/dsh@0.1.2-rc.1"
 
 	// DSH supports Node.js 22 from 22.19 onward, skips the unsupported Node.js 23
 	// line, and supports Node.js 24 and newer.
@@ -76,10 +79,13 @@ type dshManager struct {
 	cmd     *exec.Cmd
 	done    chan struct{} // closed exactly once when the process exits
 	exitErr error         // set before done is closed
-	url     string
-	port    int
-	state   string
-	message string
+	// proxyURL is the internal base URL (userinfo credential carrier) used by
+	// in-process clients; browserURL is what the WebView loads.
+	proxyURL   string
+	browserURL string
+	port       int
+	state      string
+	message    string
 
 	embedProxy    *embeddedProxy
 	proxyStarting bool
@@ -97,23 +103,39 @@ func newDSHManager(app *App) *dshManager {
 	}
 }
 
+// statusLocked builds the status snapshot every reader shares: Status() and the
+// pushed event must never disagree about which URL the frontend loads.
+func (m *dshManager) statusLocked() status {
+	return status{State: m.state, URL: m.browserURL, Port: m.port, Message: m.message}
+}
+
 // current returns a snapshot of the manager status.
 func (m *dshManager) current() status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return status{State: m.state, URL: m.url, Port: m.port, Message: m.message}
+	return m.statusLocked()
 }
 
-// setStatus records the state and pushes it to the frontend via an event.
+// internalURL returns the Go-facing base URL of the embedded proxy. In-process
+// clients (LAN proxy, notify, relay) reach it with Basic auth; the WebView must
+// not, because browsers refuse userinfo on subresource URLs.
+func (m *dshManager) internalURL() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.proxyURL
+}
+
+// setStatus records the state and pushes it to the frontend via an event. The
+// URL it publishes is the browser-facing one: the frontend loads it in an
+// iframe, and a credentialed URL would not authenticate there.
 func (m *dshManager) setStatus(state, message string) {
 	m.mu.Lock()
 	m.state = state
 	m.message = message
-	url := m.url
-	port := m.port
+	snapshot := m.statusLocked()
 	m.mu.Unlock()
 	if m.app.ctx != nil {
-		runtime.EventsEmit(m.app.ctx, "status", status{State: state, URL: url, Port: port, Message: message})
+		runtime.EventsEmit(m.app.ctx, "status", snapshot)
 	}
 }
 
@@ -264,7 +286,8 @@ func (m *dshManager) run(ctx context.Context) {
 	m.port = port
 	// DSH 0.1.2+ protects the web UI with a one-time token that it publishes
 	// on stdout. Do not expose the unauthenticated bare URL to the frontend.
-	m.url = ""
+	m.proxyURL = ""
+	m.browserURL = ""
 	m.done = make(chan struct{})
 	done := m.done
 	m.mu.Unlock()
@@ -314,7 +337,7 @@ func (m *dshManager) run(ctx context.Context) {
 
 	m.setStatus("ready", "DeepSeek Harness 已就绪")
 	if m.app.notify != nil {
-		m.app.notify.start(m.url)
+		m.app.notify.start(m.proxyURL)
 	}
 
 	// Block until the process exits after we are ready.
@@ -395,7 +418,7 @@ func (m *dshManager) waitReady(ctx context.Context, port int) <-chan bool {
 					statusCode := resp.StatusCode
 					_ = resp.Body.Close()
 					m.mu.Lock()
-					hasAdvertisedURL := m.url != ""
+					hasAdvertisedURL := m.browserURL != ""
 					m.mu.Unlock()
 					serverUp := statusCode == http.StatusUnauthorized || statusCode >= 200 && statusCode < 400
 					if serverUp && hasAdvertisedURL {
@@ -427,7 +450,7 @@ func (m *dshManager) pump(ctx context.Context, r io.Reader) {
 func (m *dshManager) captureAdvertisedURL(ctx context.Context, line string) bool {
 	m.mu.Lock()
 	expectedPort := m.port
-	if m.url != "" || m.proxyStarting {
+	if m.proxyURL != "" || m.proxyStarting {
 		m.mu.Unlock()
 		return true
 	}
@@ -437,9 +460,15 @@ func (m *dshManager) captureAdvertisedURL(ctx context.Context, line string) bool
 	if !ok {
 		return false
 	}
+	// 0.1.2+ always advertises the one-time token. A tokenless URL means an
+	// older pin or a custom DSH_COMMAND; the shell still starts, but the
+	// plugins expect the newer Remote API, so say so instead of failing silently.
+	if parsed.Query().Get("token") == "" {
+		m.logf("警告: dsh 未在 URL 中给出鉴权 token（可能不是 %s），插件可能无法加载", dshPackage)
+	}
 
 	m.mu.Lock()
-	if m.url != "" || m.proxyStarting {
+	if m.proxyURL != "" || m.proxyStarting {
 		m.mu.Unlock()
 		return true
 	}
@@ -465,7 +494,8 @@ func (m *dshManager) captureAdvertisedURL(ctx context.Context, line string) bool
 		return false
 	}
 	m.embedProxy = proxy
-	m.url = proxy.URL
+	m.proxyURL = proxy.URL
+	m.browserURL = proxy.BrowserURL
 	m.proxyErr = nil
 	m.mu.Unlock()
 	go func() {
@@ -512,7 +542,8 @@ func (m *dshManager) stopEmbeddedProxy() {
 	m.mu.Lock()
 	proxy := m.embedProxy
 	m.embedProxy = nil
-	m.url = ""
+	m.proxyURL = ""
+	m.browserURL = ""
 	m.mu.Unlock()
 	proxy.Close()
 }

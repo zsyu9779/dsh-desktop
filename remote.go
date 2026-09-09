@@ -37,39 +37,72 @@ const (
 //go:embed remote_polyfill.js
 var polyfillScript []byte
 
-// privilegedMethods mirrors dsh's PRIVILEGED_METHODS (dsh-client-connection):
-// these are the methods the trust fence pins to loopback, so a remote Device
-// should not get them unless the Owner explicitly allows it.
-var privilegedMethods = map[string]bool{
-	"agentPreset.read":         true,
-	"agentPreset.copy":         true,
-	"agentPreset.openDocument": true,
-	"agentPreset.remove":       true,
-	"host.pickDirectory":       true,
-	"host.openPath":            true,
-	"settings.describe":        true,
-	"settings.openDocument":    true,
-	"settings.update":          true,
-	"settings.replace":         true,
-	"settings.mutate":          true,
-	"credentials.describe":     true,
-	"credentials.set":          true,
-	"credentials.unset":        true,
-	"llm.discoverModels":       true,
+// remoteAllowedEndpoints is the exact /api/<namespace>/<method> surface a
+// paired Device may call. DSH 0.1.2 removed the upstream privileged-method
+// list — the /api fence now authenticates the browser session instead — so the
+// shell owns the policy and denies everything not listed here. A namespace a
+// future DSH release adds therefore stays unreachable until it is listed.
+var remoteAllowedEndpoints = map[string]bool{
+	// Session main line.
+	"session/list": true, "session/search": true, "session/create": true,
+	"session/selectModel": true, "session/modelCatalog": true,
+	"session/canOpenWorkspacePath": true, "session/rename": true, "session/fork": true,
+	"session/prompt": true, "session/attachment": true, "session/updateQueue": true,
+	"session/cancel": true, "session/page": true, "session/follow": true,
+	"session/control": true, "session/uploadFileBinary": true,
+	// Workspace organisation.
+	"workspace/create": true, "workspace/rename": true, "workspace/delete": true,
+	"workspace/insertBefore": true, "workspace/insertSessionBefore": true,
+	"workspace/archiveSession": true, "workspace/follow": true,
+	// The browse picker's primitives; the native chooser (pick) stays desktop-only.
+	"directoryPicker/list": true, "directoryPicker/createDirectory": true,
+	// Goals, commands, skills, feedback and references.
+	"goals/get": true, "goals/edit": true, "goals/pause": true, "goals/resume": true,
+	"goals/complete": true, "goals/clear": true, "goals/create": true,
+	"commands/list": true, "commands/execute": true,
+	"skills/list":                         true,
+	"messageFeedback/list":                true,
+	"messageFeedback/put":                 true,
+	"messageFeedback/delete":              true,
+	"sessionFeedback/record":              true,
+	"fileReferences/list":                 true,
+	"sessionReferenceResolver/candidates": true,
+	"agentTeams/view":                     true,
+	"agentTeams/createTask":               true,
+	"agentTeams/updateTask":               true,
+	// Read-only metadata the composer needs to render its pickers.
+	"agentPresets/list": true,
+	"llm/listProviders": true, "llm/listConfigurableProviders": true,
 }
 
-func isPrivilegedPath(path string) bool {
+// remoteAllowedExactPaths are /api routes that are not namespace/method pairs.
+var remoteAllowedExactPaths = map[string]bool{
+	// Multiplexed Remote streams (WebSocket); the phone's live updates ride it.
+	"/api/remote.mux": true,
+	// Result channel for forwarded waterfall events: without it a paired Device
+	// can receive an approval or question but never answer it.
+	"/api/$events/result": true,
+}
+
+// isRemoteAllowedPath reports whether a paired Device may reach path. Every
+// /api path outside the allowlist is refused, so a namespace a future DSH
+// release adds fails closed; non-/api/ paths (static assets and the shell's own
+// routes) are governed by isPreinstalledPluginRoute instead.
+func isRemoteAllowedPath(path string) bool {
 	if !strings.HasPrefix(path, "/api/") {
-		return false
+		return true // static assets and the shell's own routes
 	}
-	return privilegedMethods[strings.TrimPrefix(path, "/api/")]
+	if remoteAllowedExactPaths[path] {
+		return true
+	}
+	return remoteAllowedEndpoints[strings.TrimPrefix(path, "/api/")]
 }
 
 // preinstalledPluginRoutePrefixes are URL path prefixes registered by the
 // preinstalled DSH plugins (diff-review's git/file routes, file-changes'
-// reveal route). They sit outside dsh's own PRIVILEGED_METHODS allowlist, so
-// they must be blocked outright over the LAN proxy: safe on the desktop
-// loopback, but never reachable from a paired phone.
+// reveal route). They sit outside the remote endpoint allowlist, so they must
+// be blocked outright over the LAN proxy: safe on the desktop loopback, but
+// never reachable from a paired Device.
 var preinstalledPluginRoutePrefixes = []string{
 	"/diff-review/",
 	"/api/file-changes/",
@@ -405,7 +438,7 @@ func (r *remoteManager) setAllowPrivileged(v bool) {
 	r.mu.Lock()
 	r.allowPrivileged = v
 	r.mu.Unlock()
-	r.logf("privileged methods allowed: %v", v)
+	r.logf("remote scope: allow-all = %v", v)
 }
 
 func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
@@ -508,8 +541,8 @@ func (r *remoteManager) authMiddleware(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		if isPrivilegedPath(req.URL.Path) && !allowPrivileged {
-			r.logf("auth rejected: privileged method %s denied (from %s)", req.URL.Path, req.RemoteAddr)
+		if !allowPrivileged && !isRemoteAllowedPath(req.URL.Path) {
+			r.logf("auth rejected: %s is not in the remote allowlist (from %s)", req.URL.Path, req.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

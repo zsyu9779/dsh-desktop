@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// wsUpstream mimics dsh's /api/events.mux WebSocket downlink: every connected
+// wsUpstream mimics dsh's /api/remote.mux WebSocket downlink: every connected
 // client is registered and receives every broadcast frame.
 type wsUpstream struct {
 	mu       sync.Mutex
@@ -30,7 +30,7 @@ func newWSUpstream() *wsUpstream {
 
 func (u *wsUpstream) handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/events.mux" {
+		if r.URL.Path == "/api/remote.mux" {
 			u.serveWS(w, r)
 			return
 		}
@@ -109,7 +109,7 @@ func TestReverseProxyWSBroadcastToMultipleClients(t *testing.T) {
 	dialer := websocket.Dialer{
 		TLSClientConfig: client.Transport.(*http.Transport).TLSClientConfig,
 	}
-	wsURL := "wss" + base[len("https"):] + "/api/events.mux"
+	wsURL := "wss" + base[len("https"):] + "/api/remote.mux"
 
 	open := func() *websocket.Conn {
 		header := http.Header{}

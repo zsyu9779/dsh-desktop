@@ -37,7 +37,8 @@ func TestWaitReadyDoesNotAcceptUnauthorizedBareURL(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.url = "http://capability.localhost:" + strconv.Itoa(port) + "/"
+	m.proxyURL = "http://capability.localhost:" + strconv.Itoa(port) + "/"
+	m.browserURL = "http://127.0.0.1:" + strconv.Itoa(port) + "/?dshcap=capability"
 	m.mu.Unlock()
 
 	select {
@@ -74,5 +75,35 @@ func TestParseAdvertisedURLRejectsUnexpectedOrigin(t *testing.T) {
 		if _, ok := parseAdvertisedURL(line, 3080); ok {
 			t.Fatalf("parseAdvertisedURL accepted %q", line)
 		}
+	}
+}
+
+// The frontend loads status.URL in an iframe, so every reader of the status
+// snapshot must publish the browser-facing URL. A credentialed URL would be
+// refused by the WebView (Chromium blocks it outright, WebKit strips the
+// header), which is exactly how the shipped 0.1.2 adaptation failed.
+func TestStatusSnapshotPublishesBrowserURL(t *testing.T) {
+	const (
+		internal = "http://dsh:cap@127.0.0.1:1234/"
+		browser  = "http://127.0.0.1:1234/?dshcap=cap"
+	)
+	m := newDSHManager(&App{})
+	m.mu.Lock()
+	m.proxyURL = internal
+	m.browserURL = browser
+	m.port = 1234
+	m.mu.Unlock()
+
+	if got := m.current().URL; got != browser {
+		t.Fatalf("current().URL = %q, want the browser URL", got)
+	}
+	if got := m.internalURL(); got != internal {
+		t.Fatalf("internalURL() = %q, want the credentialed Go-facing URL", got)
+	}
+
+	m.setStatus("ready", "已就绪")
+	after := m.current()
+	if after.URL != browser || after.State != "ready" {
+		t.Fatalf("after setStatus status = %+v, want the browser URL and ready state", after)
 	}
 }

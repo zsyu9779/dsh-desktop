@@ -81,7 +81,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 
 - **每设备 JWT**：Host 首启生成 Ed25519 密钥对 + 短期 CA，持久化到 `~/.dsh-desktop/`（可用环境变量 `DSH_DESKTOP_STATE` 覆盖）。二维码放**一次性配对码**（TTL 60s、单次），`/?pair=<code>` 完成 Pairing → 登记 Device → 签发短时 JWT（HttpOnly cookie，含 deviceID + scope）。
 - **吊销**：设备注册表（`devices.json`）支持 list/revoke/touch；authMiddleware 每次校验 JWT 签名 + 设备仍存在（吊销即 403）+ 刷新 lastActive。
-- **scope 化**：敏感方法（dsh `PRIVILEGED_METHODS` 全集，见 §6）默认对手机 403，桌面端 `SetAllowPrivileged(true)` 才放行。判定点：URL path `/api/<method>` 是否命中 `remote.go` 的 `privilegedMethods` map。
+- **scope 化**：DSH 0.1.2 删除了上游 `PRIVILEGED_METHODS`，改由壳自己定策略（默认拒绝 + 白名单）。判定点：URL path `/api/<namespace>/<method>` 是否命中 `remote.go` 的 `remoteAllowedEndpoints` / `remoteAllowedExactPaths`；桌面端 `SetAllowPrivileged(true)` 语义变为「全部放行」。
 - **HTTPS**：反代监听改 TLS，证书由 Host CA 签发的 leaf 证书（SAN = dsh-desktop.local + LAN IP），二维码/状态暴露证书 **SHA-256 指纹**供手机 TOFU 固定。
 - **Content-Encoding**：Director 请求 `Accept-Encoding: identity`；ModifyResponse 对 gzip 做「解压 → 注入 polyfill → 重压」，避免上游开 gzip 时页面损坏。
 - 不变式仍成立：dsh 只监听 loopback，所有入站先过宿主壳鉴权 + 加密层；任务 / 文件 / 凭据 / 会话永不离开 Host。
@@ -90,11 +90,11 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 
 ## 6. dsh 内部机制与坑（查源码时很有用）
 
-- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.1.1-rc.2/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
+- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.1.2-rc.1/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
 - `dsh web` = `--profile web` 别名；`dsh-host-webserver` 只允许 host `127.0.0.1` 或 `0.0.0.0`。
 - **`--host 0.0.0.0` 被官方硬拒**（`dsh-web-app/lib/startup.js`）：「would expose remote code execution to the network」。所以不能直接绑公网，只能走反代。
 - `/api` trust 栅栏（`dsh-client-connection/lib/index.js` 的 `isTrustedApiRequest`）：Host 必须 loopback 或受信；Origin 必须匹配 Host；`sec-fetch-site` 不能是 cross-site。
-- `PRIVILEGED_METHODS`（`dsh-client-connection/lib/index.js`，**精确集合非通配**）：`agentPreset.read/copy/openDocument/remove`、`host.pickDirectory`、`host.openPath`、`settings.describe/openDocument/update/replace/mutate`、`credentials.describe/set/unset`、`llm.discoverModels`。反代把 Host+Origin 改成 loopback 后这些本会全放行——**M1.5 已在反代层做 scope 化**（见 §5.5），`remote.go` 的 `privilegedMethods` map 与此一致。
+- **0.1.2 起上游已无 `PRIVILEGED_METHODS`**：`/api` 只有「信任围栏 + 浏览器会话 cookie」（`dsh-client-connection` 的 `isTrustedApiRequest` + `BrowserAuth`），敏感面的收敛下移到客户端 `ctx.connection.isLoopback`（按 `location.hostname` 判断，仅 UI 层）。因此手机侧权限**由壳的 allowlist 独占**（见 §5.5 与 `remote.go`）。
 - 方法名在 URL path：`/api/<method>`（`pathname.slice(5)`），不是 JSON 体。
 - `crypto.randomUUID` 是 secure-context-only（`dsh-host-apiproxy/lib/types/fetch/client.js` 用它生成 rpcId）。
 - 目录选择器（`dsh-host-directory-picker-auto`）：loopback+darwin → native（`host.pickDirectory`，特权）；检测到 `SSH_CONNECTION`/`SSH_TTY` → browse（`host.listDirectory`，非特权）。
@@ -106,7 +106,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 ## 7. 环境事实
 
 - 机器：macOS（arm64），Xcode 26.3，Go 1.26.0，Node v25.8.2。
-- dsh 版本：`@deepseek-ai/dsh@0.1.1-rc.2`（`dsh.go` 的 `dshPackage` 常量固定）。
+- dsh 版本：`@deepseek-ai/dsh@0.1.2-rc.1`（`dsh.go` 的 `dshPackage` 常量固定；运行时可用 `~/.dsh-desktop/config.json` 的 `dshVersion` 覆盖）。
 - 端口占用：`3080` = 当前 agent session 的 harness（勿杀）；`8787` = 远程代理（HTTPS）；`5173` = vite。
 - 日志：`~/.dsh-desktop/logs/dsh.log`。
 - 桌面壳工作目录：默认用户主目录，可用 `DSH_WORKSPACE` 覆盖，`DSH_HOME` 控制 profiles/存储位置。

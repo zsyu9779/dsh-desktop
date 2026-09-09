@@ -28,7 +28,7 @@ Most DeepSeek Harness desktop shells are built on **Electron**. This project tak
 
 ## How it works
 
-- On launch, uses `npm exec` to bootstrap `pnpm@11.7.0`, then starts `@deepseek-ai/dsh@0.1.1-rc.2 web --no-open` on a managed port (prefers `3080`, falls back to a random port if taken)
+- On launch, uses `npm exec` to bootstrap `pnpm@11.7.0`, then starts `@deepseek-ai/dsh@0.1.2-rc.1 web --no-open` on a managed port (prefers `3080`, falls back to a random port if taken)
 - Polls the local Web UI until ready, then redirects the window to that address
 - Cleans up the entire process tree on exit (npm → pnpm → node → dsh); if the service exits unexpectedly, shows a native dialog and quits
 

@@ -186,6 +186,84 @@ func TestEmbeddedProxyRejectsRequestsWithoutCapabilityHost(t *testing.T) {
 	}
 }
 
+// A browser never forwards userinfo from a subresource URL (Chromium blocks
+// the request outright, WebKit strips the header), so the WebView must be able
+// to authenticate with a capability the URL can actually carry: a query
+// parameter. This is the regression test for the shipped 0.1.2 adaptation,
+// which published a credentialed URL the WebView silently refused.
+func TestEmbeddedProxyAcceptsBrowserCapabilityWithoutUserinfo(t *testing.T) {
+	const cookieName = "dsh-auth-test"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("token") == "one-time" {
+			http.SetCookie(w, &http.Cookie{
+				Name: cookieName, Value: "session", Path: "/",
+				HttpOnly: true, SameSite: http.SameSiteStrictMode,
+			})
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		if _, err := r.Cookie(cookieName); err != nil {
+			http.Error(w, "authentication required", http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, "authenticated DSH")
+	}))
+	t.Cleanup(upstream.Close)
+
+	authenticatedURL, err := url.Parse(upstream.URL + "/?token=one-time")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy, err := newEmbeddedProxy(context.Background(), authenticatedURL)
+	if err != nil {
+		t.Fatalf("newEmbeddedProxy: %v", err)
+	}
+	t.Cleanup(proxy.Close)
+
+	browserURL, err := url.Parse(proxy.BrowserURL)
+	if err != nil {
+		t.Fatalf("browser URL %q: %v", proxy.BrowserURL, err)
+	}
+	if browserURL.User != nil {
+		t.Fatalf("browser URL must not carry userinfo: %q", proxy.BrowserURL)
+	}
+	if got := browserURL.Query().Get(embeddedProxyCapabilityQuery); got == "" {
+		t.Fatalf("browser URL must carry the capability query: %q", proxy.BrowserURL)
+	}
+
+	plain := &http.Client{Transport: &http.Transport{Proxy: nil}}
+
+	// Pre-claim, a request without the capability is refused.
+	uncredentialed := *browserURL
+	uncredentialed.RawQuery = ""
+	denied, err := plain.Get(uncredentialed.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = denied.Body.Close()
+	if denied.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("capability-less pre-claim status = %d, want 401", denied.StatusCode)
+	}
+
+	// The browser-shaped request carries no Authorization header at all.
+	req, err := http.NewRequest(http.MethodGet, proxy.BrowserURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Header.Get("Authorization") != "" {
+		t.Fatal("browser-shaped request must not carry Authorization")
+	}
+	resp, err := plain.Do(req)
+	if err != nil {
+		t.Fatalf("browser-shaped request: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK || string(body) != "authenticated DSH" {
+		t.Fatalf("browser-shaped response = %d %q", resp.StatusCode, body)
+	}
+}
+
 func TestDSHManagerPublishesEmbeddedProxyURL(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("token") == "one-time" {
