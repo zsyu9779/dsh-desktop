@@ -31,6 +31,9 @@ type preinstallPlugin struct {
 	// leading "- insert:" line and trailing newline), or "" when the plugin
 	// needs no extra config in the patch layer.
 	Insert string
+	// HostOnly marks a plugin with no browser half. The client-bundle checks
+	// skip it; every other preinstalled plugin must still ship ./client.
+	HostOnly bool
 }
 
 // preinstalledPlugins is the fixed set of plugins shipped by this build.
@@ -90,6 +93,19 @@ var preinstalledPlugins = []preinstallPlugin{
 		Insert: `- insert:
     - id: account-login
       name: dsh-account-login
+`,
+	},
+	{
+		// Keeps sessions recorded before DSH renamed the "code" agent preset
+		// resumable on 0.1.2+ by aliasing it to "ptc" in the user preset root.
+		ID:       "agent-preset-compat",
+		Name:     "dsh-agent-preset-compat",
+		Dir:      "agent-preset-compat",
+		Version:  "0.1.0",
+		HostOnly: true,
+		Insert: `- insert:
+    - id: agent-preset-compat
+      name: dsh-agent-preset-compat
 `,
 	},
 }

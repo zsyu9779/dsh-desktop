@@ -1,0 +1,5 @@
+# dsh-agent-preset-compat bundle patch: one host-only row.
+# It writes the compatibility alias into the user preset root on activation.
+- insert:
+    - id: agent-preset-compat
+      name: 'dsh-agent-preset-compat'

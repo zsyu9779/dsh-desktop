@@ -58,6 +58,9 @@ func TestPreinstalledClientBundlesRegisterPackageName(t *testing.T) {
 			if manifest.Version != plugin.Version {
 				t.Fatalf("package version = %q, preinstall version = %q", manifest.Version, plugin.Version)
 			}
+			if plugin.HostOnly {
+				return // the manifest is checked above; a host-only plugin ships no browser half
+			}
 
 			clientExport := manifest.Exports["./client"]
 			var clientPath string
@@ -88,6 +91,9 @@ func TestPreinstalledClientBundlesDoNotUseRemovedRuntimeModule(t *testing.T) {
 	const removedModule = "@deepseek-ai/dsh-client-runtime"
 
 	for _, plugin := range preinstalledPlugins {
+		if plugin.HostOnly {
+			continue // nothing to inspect: a host-only plugin has no client bundle
+		}
 		t.Run(plugin.Name, func(t *testing.T) {
 			packageJSON, err := fs.ReadFile(pluginsFS, filepath.ToSlash(filepath.Join("plugins", plugin.Dir, "package.json")))
 			if err != nil {
