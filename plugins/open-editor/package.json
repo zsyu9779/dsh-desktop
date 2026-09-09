@@ -25,6 +25,9 @@
     "install.ps1"
   ],
   "dsh": {
+    "desktop": {
+      "vendored": true
+    },
     "client": {
       "platform": "web",
       "inject": [

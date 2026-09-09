@@ -164,6 +164,34 @@ func savePreinstallState(path string, s preinstallState) error {
 	return os.WriteFile(path, append(raw, '\n'), 0o644)
 }
 
+// pluginManifest is the slice of an installed plugin's package.json this app
+// reads: its version and the ownership marker its own copies carry.
+type pluginManifest struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	DSH     struct {
+		Desktop struct {
+			Vendored bool `json:"vendored"`
+		} `json:"desktop"`
+	} `json:"dsh"`
+}
+
+// installedPluginManifest reads an installed plugin's manifest. The marker it
+// carries lives in the plugin's own directory, so ownership survives losing the
+// preinstall state directory — the failure that strands an incompatible copy
+// after a DSH version bump.
+func installedPluginManifest(target string) (pluginManifest, bool) {
+	raw, err := os.ReadFile(filepath.Join(target, "package.json"))
+	if err != nil {
+		return pluginManifest{}, false
+	}
+	var manifest pluginManifest
+	if json.Unmarshal(raw, &manifest) != nil {
+		return pluginManifest{}, false
+	}
+	return manifest, true
+}
+
 // copyEmbeddedDir materializes an embedded plugins/ subdirectory to dst.
 func copyEmbeddedDir(srcDir, dst string) error {
 	fullSrc := filepath.ToSlash(filepath.Join("plugins", srcDir))
@@ -253,9 +281,9 @@ func rollbackPreinstall(createdDirs []string, backupPath, patchPath string) {
 }
 
 // runPreinstall installs the shipped plugins into the DSH web profile,
-// idempotently and without touching a plugin the user already installed. It
-// returns a short status line and an error on failure (after best-effort
-// rollback of anything this run created).
+// idempotently and without touching a plugin this app did not install (a copy
+// with no ownership marker). It returns a short status line and an error on
+// failure (after best-effort rollback of anything this run created).
 func runPreinstall(logf func(format string, args ...any)) (string, error) {
 	dshHome := resolveDSHHome()
 	if dshHome == "" {
@@ -282,18 +310,38 @@ func runPreinstall(logf func(format string, args ...any)) (string, error) {
 
 		if _, err := os.Lstat(target); err == nil {
 			version, isOurs := owned[p.Name]
-			if isOurs {
-				if version == p.Version {
-					continue // already ours at this version
-				}
+			// The manifest marker is the second ownership source: a lost or
+			// stale preinstall-state.json must not strand an incompatible copy
+			// of our own plugin after a DSH version bump. The name has to match
+			// too, so a marker copied onto some other package claims nothing.
+			installed, readable := installedPluginManifest(target)
+			marked := readable && installed.Name == p.Name && installed.DSH.Desktop.Vendored
+			if marked {
+				version, isOurs = installed.Version, true
+			}
+
+			switch {
+			case isOurs && version == p.Version && marked:
+				continue // ours, current, and already self-identifying
+			case isOurs && version != p.Version:
 				// Version bump: replace our previous copy.
 				if err := os.RemoveAll(target); err != nil {
 					rollbackPreinstall(createdDirs, backupPath, patchPath)
 					return "", fmt.Errorf("preinstall %s: remove old: %w", p.Name, err)
 				}
-			} else {
-				logf("preinstall: %s already present, leaving user install untouched", p.Name)
+			case !isOurs:
+				// A copy we did not install is never touched. Warn whenever it
+				// could be an outdated or unreadable version of ours — that is
+				// the state that leaves an incompatible plugin in place and
+				// breaks the whole UI; a matching version we did not write is
+				// harmless, and warning every boot would only be noise.
+				if !readable || installed.Version == "" || installed.Version != p.Version {
+					logf("preinstall: %s %s is present but was not installed by this app (shipped %s); leaving it untouched. Delete %s if that plugin fails to load", p.Name, installed.Version, p.Version, target)
+				}
 				continue
+			default:
+				// Ours at the shipped version but copied before the marker
+				// existed: re-copy below so a later state loss still knows.
 			}
 		}
 
@@ -370,8 +418,9 @@ func removePatchBlock(patchPath, block string) error {
 }
 
 // uninstallPreinstalledPlugin removes one preinstalled plugin: its node_modules
-// directory (only when this desktop created it) and its cordis.patch.yml insert
-// block. It is the single-plugin inverse of runPreinstall.
+// directory (only when this app installed it, judged by the state record or the
+// ownership marker) and its cordis.patch.yml insert block. It is the
+// single-plugin inverse of runPreinstall.
 func uninstallPreinstalledPlugin(id string, logf func(format string, args ...any)) error {
 	var p *preinstallPlugin
 	for i := range preinstalledPlugins {
@@ -400,10 +449,14 @@ func uninstallPreinstalledPlugin(id string, logf func(format string, args ...any
 			break
 		}
 	}
+	target := filepath.Join(profileModules, filepath.FromSlash(p.Name))
+	if !owned {
+		manifest, readable := installedPluginManifest(target)
+		owned = readable && manifest.DSH.Desktop.Vendored
+	}
 
-	// Only remove the directory when we created it (tracked in state).
+	// Only remove the directory when we created it (state record or marker).
 	if owned {
-		target := filepath.Join(profileModules, filepath.FromSlash(p.Name))
 		if err := os.RemoveAll(target); err != nil {
 			return fmt.Errorf("remove %s: %w", p.Name, err)
 		}

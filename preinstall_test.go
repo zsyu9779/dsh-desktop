@@ -317,3 +317,215 @@ func TestRunPreinstallLeavesUserInstallUntouched(t *testing.T) {
 		}
 	}
 }
+
+// Every vendored plugin must carry the ownership marker, or preinstall cannot
+// recognize its own copy once the desktop state directory is gone.
+func TestPreinstalledPluginManifestsCarryOwnershipMarker(t *testing.T) {
+	for _, plugin := range preinstalledPlugins {
+		t.Run(plugin.Name, func(t *testing.T) {
+			packageJSON, err := fs.ReadFile(pluginsFS, filepath.ToSlash(filepath.Join("plugins", plugin.Dir, "package.json")))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var manifest struct {
+				DSH struct {
+					Desktop struct {
+						Vendored bool `json:"vendored"`
+					} `json:"desktop"`
+				} `json:"dsh"`
+			}
+			if err := json.Unmarshal(packageJSON, &manifest); err != nil {
+				t.Fatal(err)
+			}
+			if !manifest.DSH.Desktop.Vendored {
+				t.Fatal("manifest is missing dsh.desktop.vendored; preinstall could not claim it after a state loss")
+			}
+		})
+	}
+}
+
+// The regression this hardening exists for: with preinstall-state.json gone,
+// an older copy of our own plugin must still be replaced instead of being
+// mistaken for a user install and left to break the next DSH version.
+func TestRunPreinstallUpgradesMarkerOwnedPluginAfterStateLoss(t *testing.T) {
+	dshHome := t.TempDir()
+	t.Setenv("DSH_HOME", dshHome)
+	t.Setenv(stateDirEnv, t.TempDir())
+
+	if _, err := runPreinstall(noopLogf); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(preinstallStatePath()); err != nil {
+		t.Fatalf("drop state file: %v", err)
+	}
+
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	stale := `{"name":"dsh-file-changes","version":"0.0.0","dsh":{"desktop":{"vendored":true}}}`
+	if err := os.WriteFile(filepath.Join(target, "package.json"), []byte(stale), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := runPreinstall(noopLogf)
+	if err != nil {
+		t.Fatalf("runPreinstall: %v", err)
+	}
+	if !strings.Contains(status, "installed 1") {
+		t.Fatalf("status = %q, want the marker-owned plugin upgraded", status)
+	}
+
+	var shipped string
+	for _, plugin := range preinstalledPlugins {
+		if plugin.Name == "dsh-file-changes" {
+			shipped = plugin.Version
+		}
+	}
+	restored, readable := installedPluginManifest(target)
+	if !readable {
+		t.Fatal("restored copy is unreadable")
+	}
+	if restored.Version != shipped {
+		t.Fatalf("restored version = %q, want %q", restored.Version, shipped)
+	}
+	if !restored.DSH.Desktop.Vendored {
+		t.Fatal("restored copy lost its ownership marker")
+	}
+}
+
+// An untracked same-name directory is never overwritten, but it must say so
+// loudly and name the path: a silent skip is what makes the failure look
+// like a broken UI instead of a stale plugin.
+func TestRunPreinstallWarnsAboutUntrackedPlugin(t *testing.T) {
+	dshHome := t.TempDir()
+	t.Setenv("DSH_HOME", dshHome)
+	t.Setenv(stateDirEnv, t.TempDir())
+
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	userPkg := `{"name":"dsh-file-changes","version":"9.9.9"}`
+	if err := os.WriteFile(filepath.Join(target, "package.json"), []byte(userPkg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var logs []string
+	logf := func(format string, args ...any) { logs = append(logs, fmt.Sprintf(format, args...)) }
+	if _, err := runPreinstall(logf); err != nil {
+		t.Fatalf("runPreinstall: %v", err)
+	}
+
+	joined := strings.Join(logs, "\n")
+	if !strings.Contains(joined, "dsh-file-changes") || !strings.Contains(joined, target) {
+		t.Fatalf("expected a warning naming the plugin and its path, got:\n%s", joined)
+	}
+	raw, err := os.ReadFile(filepath.Join(target, "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != userPkg {
+		t.Fatalf("untracked install overwritten: %s", raw)
+	}
+}
+
+// A markerless copy already at the version we ship needs no action, and a
+// warning on every boot would only teach the reader to ignore the real one.
+func TestRunPreinstallStaysQuietAboutMatchingUntrackedPlugin(t *testing.T) {
+	dshHome := t.TempDir()
+	t.Setenv("DSH_HOME", dshHome)
+	t.Setenv(stateDirEnv, t.TempDir())
+
+	shipped := ""
+	for _, plugin := range preinstalledPlugins {
+		if plugin.Name == "dsh-file-changes" {
+			shipped = plugin.Version
+		}
+	}
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	userPkg := fmt.Sprintf(`{"name":"dsh-file-changes","version":%q}`, shipped)
+	if err := os.WriteFile(filepath.Join(target, "package.json"), []byte(userPkg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var logs []string
+	logf := func(format string, args ...any) { logs = append(logs, fmt.Sprintf(format, args...)) }
+	if _, err := runPreinstall(logf); err != nil {
+		t.Fatalf("runPreinstall: %v", err)
+	}
+	for _, line := range logs {
+		if strings.Contains(line, "dsh-file-changes") {
+			t.Fatalf("expected no warning for a matching untracked copy, got: %s", line)
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(target, "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != userPkg {
+		t.Fatalf("matching untracked copy overwritten: %s", raw)
+	}
+}
+
+// A copy installed before the ownership marker existed must be re-copied once
+// so a later state loss can still recognize it.
+func TestRunPreinstallArmsOwnershipMarkerOnTrackedCopy(t *testing.T) {
+	dshHome := t.TempDir()
+	t.Setenv("DSH_HOME", dshHome)
+	t.Setenv(stateDirEnv, t.TempDir())
+
+	if _, err := runPreinstall(noopLogf); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	manifest, readable := installedPluginManifest(target)
+	if !readable || !manifest.DSH.Desktop.Vendored {
+		t.Fatal("first install did not carry the ownership marker")
+	}
+	// Strip the marker to look like a copy from the previous desktop build.
+	stripped := fmt.Sprintf(`{"name":%q,"version":%q}`, manifest.Name, manifest.Version)
+	if err := os.WriteFile(filepath.Join(target, "package.json"), []byte(stripped), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := runPreinstall(noopLogf)
+	if err != nil {
+		t.Fatalf("runPreinstall: %v", err)
+	}
+	if !strings.Contains(status, "installed 1") {
+		t.Fatalf("status = %q, want the tracked copy re-copied to arm its marker", status)
+	}
+	armed, readable := installedPluginManifest(target)
+	if !readable || !armed.DSH.Desktop.Vendored {
+		t.Fatal("tracked copy was not armed with the ownership marker")
+	}
+}
+
+// Uninstall must still remove a directory this app installed when only the
+// manifest marker proves ownership.
+func TestUninstallPreinstalledPluginUsesOwnershipMarker(t *testing.T) {
+	dshHome := t.TempDir()
+	t.Setenv("DSH_HOME", dshHome)
+	t.Setenv(stateDirEnv, t.TempDir())
+
+	if _, err := runPreinstall(noopLogf); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(preinstallStatePath()); err != nil {
+		t.Fatalf("drop state file: %v", err)
+	}
+
+	if err := uninstallPreinstalledPlugin("file-changes", noopLogf); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatal("marker-owned plugin directory survived uninstall")
+	}
+	raw, _ := os.ReadFile(filepath.Join(dshHome, "profiles", "web", "cordis.patch.yml"))
+	if strings.Contains(string(raw), "id: file-changes") {
+		t.Fatalf("patch block survived uninstall: %s", raw)
+	}
+}

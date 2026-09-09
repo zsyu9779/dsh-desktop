@@ -11,6 +11,9 @@
     "./package.json": "./package.json"
   },
   "dsh": {
+    "desktop": {
+      "vendored": true
+    },
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
