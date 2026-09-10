@@ -90,8 +90,9 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 
 ## 6. dsh 内部机制与坑（查源码时很有用）
 
-- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.1.2-rc.1/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
+- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.1.5-rc.1/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
 - `dsh web` = `--profile web` 别名；`dsh-host-webserver` 只允许 host `127.0.0.1` 或 `0.0.0.0`。
+- **0.1.5 起 CLI 入口被 `import.meta.main` 守卫**（`apps/cli/src/bin.ts`）：该特性 Node.js 22.18 / 24.2 才有，在 **24.0/24.1 上整个 CLI 会静默退出**——退出码 0、stdout 无任何输出，壳只会白等到 `readyTimeout` 超时。所以 `isSupportedNodeVersion` 对 24 线要求 minor ≥ 2。
 - **`--host 0.0.0.0` 被官方硬拒**（`dsh-web-app/lib/startup.js`）：「would expose remote code execution to the network」。所以不能直接绑公网，只能走反代。
 - `/api` trust 栅栏（`dsh-client-connection/lib/index.js` 的 `isTrustedApiRequest`）：Host 必须 loopback 或受信；Origin 必须匹配 Host；`sec-fetch-site` 不能是 cross-site。
 - **0.1.2 起上游已无 `PRIVILEGED_METHODS`**：`/api` 只有「信任围栏 + 浏览器会话 cookie」（`dsh-client-connection` 的 `isTrustedApiRequest` + `BrowserAuth`），敏感面的收敛下移到客户端 `ctx.connection.isLoopback`（按 `location.hostname` 判断，仅 UI 层）。因此手机侧权限**由壳的 allowlist 独占**（见 §5.5 与 `remote.go`）。
@@ -106,7 +107,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 ## 7. 环境事实
 
 - 机器：macOS（arm64），Xcode 26.3，Go 1.26.0，Node v25.8.2。
-- dsh 版本：`@deepseek-ai/dsh@0.1.2-rc.1`（`dsh.go` 的 `dshPackage` 常量固定；运行时可用 `~/.dsh-desktop/config.json` 的 `dshVersion` 覆盖）。
+- dsh 版本：`@deepseek-ai/dsh@0.1.5-rc.1`（`dsh.go` 的 `dshPackage` 常量固定；运行时可用 `~/.dsh-desktop/config.json` 的 `dshVersion` 覆盖）。
 - 端口占用：`3080` = 当前 agent session 的 harness（勿杀）；`8787` = 远程代理（HTTPS）；`5173` = vite。
 - 日志：`~/.dsh-desktop/logs/dsh.log`。
 - 桌面壳工作目录：默认用户主目录，可用 `DSH_WORKSPACE` 覆盖，`DSH_HOME` 控制 profiles/存储位置。

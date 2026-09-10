@@ -59,7 +59,7 @@ DeepSeek Harness 的对话、模型、插件、会话和设置能力均由上游
 
 ## 下载与安装
 
-运行 DeepSeek Harness Desktop 前，请先安装 [Node.js 22.19+（22.x）或 24+](https://nodejs.org/)。应用依赖 Node.js 附带的 `npm` 下载和启动 DSH。
+运行 DeepSeek Harness Desktop 前，请先安装 [Node.js 22.19+（22.x）或 24.2+（24.x）](https://nodejs.org/)。应用依赖 Node.js 附带的 `npm` 下载和启动 DSH。
 
 前往 [GitHub Releases](https://github.com/zsyu9779/dsh-desktop/releases/latest) 下载对应平台的安装包：
 
@@ -105,7 +105,7 @@ DeepSeek Harness Desktop (Wails / Go)
         └── Local Web UI on 127.0.0.1
 ```
 
-应用默认固定上游版本 `@deepseek-ai/dsh@0.1.2-rc.1`，避免每次启动因上游最新版变化而产生不可预测的行为。
+应用默认固定上游版本 `@deepseek-ai/dsh@0.1.5-rc.1`，避免每次启动因上游最新版变化而产生不可预测的行为。
 
 ## 配置
 
@@ -128,7 +128,7 @@ DeepSeek Harness Desktop (Wails / Go)
 开发环境需要：
 
 - Go 1.23+
-- Node.js 22.19+（22.x）或 24+
+- Node.js 22.19+（22.x）或 24.2+（24.x）
 - Wails v2.11+
 
 安装 Wails CLI 并构建：

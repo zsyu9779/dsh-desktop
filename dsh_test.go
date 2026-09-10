@@ -19,7 +19,11 @@ func TestIsSupportedNodeVersion(t *testing.T) {
 		{name: "newer 22", version: "v22.20.1", supported: true},
 		{name: "older 22", version: "v22.18.9", supported: false},
 		{name: "unsupported 23", version: "v23.11.1", supported: false},
-		{name: "supported 24", version: "v24.0.0", supported: true},
+		// 24.0/24.1 lack import.meta.main, which dsh 0.1.5's CLI entry guards on.
+		{name: "24 before import.meta.main", version: "v24.0.0", supported: false},
+		{name: "24.1 before import.meta.main", version: "v24.1.9", supported: false},
+		{name: "24 at import.meta.main", version: "v24.2.0", supported: true},
+		{name: "newer 24", version: "v24.19.0", supported: true},
 		{name: "supported future major", version: "v25.0.0", supported: true},
 		{name: "unsupported old major", version: "v20.20.0", supported: false},
 		{name: "invalid version", version: "22.19.0", supported: false},

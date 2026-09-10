@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -36,8 +37,11 @@ func TestPinnedDSHPackageUsesConfigOverride(t *testing.T) {
 	if got := pinnedDSHPackage(); got != dshPackage {
 		t.Fatalf("expected default pin %q, got %q", dshPackage, got)
 	}
-	if got := currentDSHVersion(); got != "0.1.2-rc.1" {
-		t.Fatalf("expected current version 0.1.2-rc.1, got %q", got)
+	if want := strings.TrimPrefix(dshPackage, "@deepseek-ai/dsh@"); currentDSHVersion() != want {
+		t.Fatalf("expected current version %q, got %q", want, currentDSHVersion())
+	}
+	if v := currentDSHVersion(); !dshVersionPattern.MatchString(v) {
+		t.Fatalf("pinned version %q does not match the accepted version pattern", v)
 	}
 
 	// Config override wins.
