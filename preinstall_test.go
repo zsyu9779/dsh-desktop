@@ -193,6 +193,41 @@ func TestRunPreinstallInstallsAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestRunPreinstallDisablesUnrunnableUpstreamRows(t *testing.T) {
+	dshHome := t.TempDir()
+	t.Setenv("DSH_HOME", dshHome)
+	t.Setenv(stateDirEnv, t.TempDir())
+
+	if _, err := runPreinstall(noopLogf); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+
+	patchPath := filepath.Join(dshHome, "profiles", "web", "cordis.patch.yml")
+	raw, err := os.ReadFile(patchPath)
+	if err != nil {
+		t.Fatalf("patch file missing: %v", err)
+	}
+	for _, row := range disabledUpstreamRows {
+		if !strings.Contains(string(raw), strings.TrimSpace(row.Block)) {
+			t.Fatalf("patch missing disable block for %s:\n%s", row.ID, raw)
+		}
+	}
+
+	// A second run must leave the block alone rather than append it again.
+	if _, err := runPreinstall(noopLogf); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	raw2, err := os.ReadFile(patchPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range disabledUpstreamRows {
+		if got := strings.Count(string(raw2), "id: "+row.ID); got != 1 {
+			t.Fatalf("disable block for %s appears %d time(s):\n%s", row.ID, got, raw2)
+		}
+	}
+}
+
 func TestRunPreinstallUpgradesOnVersionBump(t *testing.T) {
 	dshHome := t.TempDir()
 	t.Setenv("DSH_HOME", dshHome)

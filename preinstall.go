@@ -110,6 +110,27 @@ var preinstalledPlugins = []preinstallPlugin{
 	},
 }
 
+// disabledUpstreamRows are client rows the shipped DSH web composition mounts
+// but this app cannot run. Each is disabled through the same profile patch layer
+// the plugins are registered in, so the rest of the composition — including the
+// surfaces those rows only decorate — keeps working.
+//
+// ui-sidebar-documentpreview: its bundled renderers evaluate the Iterator global,
+// which WebKit gained only in Safari 18.4 / macOS 15.4. On older macOS the whole
+// entry fails to import with "Can't find variable: Iterator", so the right
+// sidebar's document tab is dropped instead of throwing at every boot.
+var disabledUpstreamRows = []struct {
+	// ID is the composition row id to disable.
+	ID string
+	// Block is the exact cordis.patch.yml text appended for it.
+	Block string
+}{
+	{
+		ID:    "ui-sidebar-documentpreview",
+		Block: "- id: ui-sidebar-documentpreview\n  disabled: true\n",
+	},
+}
+
 const preinstallStateFile = "preinstall-state.json"
 
 type installedPlugin struct {
@@ -363,6 +384,17 @@ func runPreinstall(logf func(format string, args ...any)) (string, error) {
 			if appended {
 				logf("preinstall: registered %s in cordis.patch.yml", p.Name)
 			}
+		}
+	}
+
+	for _, row := range disabledUpstreamRows {
+		appended, err := appendPatch(patchPath, row.ID, row.Block, &backupPath)
+		if err != nil {
+			rollbackPreinstall(createdDirs, backupPath, patchPath)
+			return "", fmt.Errorf("preinstall: disable %s: %w", row.ID, err)
+		}
+		if appended {
+			logf("preinstall: disabled %s in cordis.patch.yml", row.ID)
 		}
 	}
 
