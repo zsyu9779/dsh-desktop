@@ -627,9 +627,8 @@ func (m *dshManager) buildCommand(ctx context.Context, port int, nodeInstall nod
 		cmd.Env = withEnv(cmd.Env, "NPM_CONFIG_CACHE", managedNPMCacheDir())
 		cmd.Env = withEnv(cmd.Env, "NPM_CONFIG_YES", "true")
 	}
-	// Expose the resolved workspace to the child so workspace-bound plugins
-	// (e.g. the file-changes reveal route) can validate against it instead of
-	// falling back to HOME alone.
+	// Expose the resolved workspace to the child so workspace-bound plugins can
+	// validate against it instead of falling back to HOME alone.
 	if wd != "" {
 		cmd.Env = withEnv(cmd.Env, "DSH_WORKSPACE", wd)
 	}

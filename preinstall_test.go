@@ -27,9 +27,9 @@ func TestResolveDSHHome(t *testing.T) {
 }
 
 func TestPatchHasPlugin(t *testing.T) {
-	content := "- insert:\n    - id: file-changes\n      name: dsh-file-changes\n"
-	if !patchHasPlugin(content, "file-changes") {
-		t.Error("patchHasPlugin should find file-changes")
+	content := "- insert:\n    - id: example-plugin\n      name: dsh-example-plugin\n"
+	if !patchHasPlugin(content, "example-plugin") {
+		t.Error("patchHasPlugin should find example-plugin")
 	}
 	if patchHasPlugin(content, "diff-review") {
 		t.Error("patchHasPlugin should not find diff-review")
@@ -137,20 +137,6 @@ func TestPreinstalledClientBundlesDoNotUseRemovedRuntimeModule(t *testing.T) {
 	}
 }
 
-func TestFileChangesUsesCurrentConversationService(t *testing.T) {
-	bundle, err := fs.ReadFile(pluginsFS, "plugins/file-changes/lib/client.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	contents := string(bundle)
-	if strings.Contains(contents, `"conversationEvents"`) || strings.Contains(contents, "ctx.conversationEvents") {
-		t.Fatal("file-changes still depends on the removed conversationEvents root service")
-	}
-	if !strings.Contains(contents, `"uiConversation"`) || !strings.Contains(contents, "ctx.uiConversation.events.register") {
-		t.Fatal("file-changes does not register through the current uiConversation service")
-	}
-}
-
 func TestRunPreinstallInstallsAndIsIdempotent(t *testing.T) {
 	dshHome := t.TempDir()
 	t.Setenv("DSH_HOME", dshHome)
@@ -165,7 +151,7 @@ func TestRunPreinstallInstallsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("first run status = %q, want %q", status, wantStatus)
 	}
 
-	pkg := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes", "package.json")
+	pkg := filepath.Join(dshHome, "profiles", "node_modules", "dsh-plugin-diff-review", "package.json")
 	if _, err := os.Stat(pkg); err != nil {
 		t.Fatalf("plugin not copied: %v", err)
 	}
@@ -175,7 +161,7 @@ func TestRunPreinstallInstallsAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("patch file missing: %v", err)
 	}
-	if !strings.Contains(string(raw), "id: file-changes") {
+	if !strings.Contains(string(raw), "id: diff-review") {
 		t.Fatalf("patch missing insert block: %s", raw)
 	}
 
@@ -188,7 +174,7 @@ func TestRunPreinstallInstallsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("second run status = %q, want up to date", status2)
 	}
 	raw2, _ := os.ReadFile(patchPath)
-	if strings.Count(string(raw2), "id: file-changes") != 1 {
+	if strings.Count(string(raw2), "id: diff-review") != 1 {
 		t.Fatalf("patch insert duplicated: %s", raw2)
 	}
 }
@@ -228,6 +214,101 @@ func TestRunPreinstallDisablesUnrunnableUpstreamRows(t *testing.T) {
 	}
 }
 
+// Retiring a dropped plugin has to take both halves: the directory this app
+// installed and the cordis row it wrote. Leaving either behind keeps loading a
+// plugin the current build no longer ships or keeps in step.
+func TestRunPreinstallRetiresDroppedPlugins(t *testing.T) {
+	dshHome := t.TempDir()
+	t.Setenv("DSH_HOME", dshHome)
+	t.Setenv(stateDirEnv, t.TempDir())
+
+	if _, err := runPreinstall(noopLogf); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+
+	profileModules := filepath.Join(dshHome, "profiles", "node_modules")
+	patchPath := filepath.Join(dshHome, "profiles", "web", "cordis.patch.yml")
+
+	// Rebuild what a build that still shipped them left behind.
+	state := loadPreinstallState(preinstallStatePath())
+	raw, err := os.ReadFile(patchPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(raw)
+	for _, p := range retiredPlugins {
+		target := filepath.Join(profileModules, filepath.FromSlash(p.Name))
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		manifest := fmt.Sprintf(`{"name":%q,"version":"0.0.1","dsh":{"desktop":{"vendored":true}}}`, p.Name)
+		if err := os.WriteFile(filepath.Join(target, "package.json"), []byte(manifest), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		state.Installed = append(state.Installed, installedPlugin{Name: p.Name, Version: "0.0.1"})
+		content += "\n" + p.Block
+	}
+	if err := savePreinstallState(preinstallStatePath(), state); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(patchPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := runPreinstall(noopLogf)
+	if err != nil {
+		t.Fatalf("retire run: %v", err)
+	}
+	want := fmt.Sprintf("retired %d", len(retiredPlugins))
+	if !strings.Contains(status, want) {
+		t.Fatalf("status = %q, want %q", status, want)
+	}
+
+	for _, p := range retiredPlugins {
+		target := filepath.Join(profileModules, filepath.FromSlash(p.Name))
+		if _, err := os.Lstat(target); !os.IsNotExist(err) {
+			t.Fatalf("%s is still installed after retirement", p.Name)
+		}
+		if strings.Contains(p.Name, "/") {
+			if _, err := os.Lstat(filepath.Dir(target)); !os.IsNotExist(err) {
+				t.Fatalf("scope directory for %s survived retirement", p.Name)
+			}
+		}
+		raw, _ := os.ReadFile(patchPath)
+		if strings.Contains(string(raw), "id: "+p.ID) {
+			t.Fatalf("%s is still registered in cordis.patch.yml:\n%s", p.Name, raw)
+		}
+		for _, ip := range loadPreinstallState(preinstallStatePath()).Installed {
+			if ip.Name == p.Name {
+				t.Fatalf("state still records retired plugin %s", p.Name)
+			}
+		}
+	}
+
+	// Every plugin this build still ships keeps its directory and its row.
+	raw, err = os.ReadFile(patchPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range preinstalledPlugins {
+		if _, err := os.Stat(filepath.Join(profileModules, filepath.FromSlash(p.Name))); err != nil {
+			t.Fatalf("shipped plugin %s lost its directory: %v", p.Name, err)
+		}
+		if !strings.Contains(string(raw), "id: "+p.ID) {
+			t.Fatalf("shipped plugin %s lost its registration:\n%s", p.Name, raw)
+		}
+	}
+
+	// Retirement is one-way: the next boot has nothing left to do.
+	status2, err := runPreinstall(noopLogf)
+	if err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if !strings.Contains(status2, "up to date") {
+		t.Fatalf("second run = %q, want up to date", status2)
+	}
+}
+
 func TestRunPreinstallUpgradesOnVersionBump(t *testing.T) {
 	dshHome := t.TempDir()
 	t.Setenv("DSH_HOME", dshHome)
@@ -236,14 +317,14 @@ func TestRunPreinstallUpgradesOnVersionBump(t *testing.T) {
 	if _, err := runPreinstall(noopLogf); err != nil {
 		t.Fatal(err)
 	}
-	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-plugin-diff-review")
 
-	// Simulate an older recorded version for file-changes and a corrupted install.
+	// Simulate an older recorded version for diff-review and a corrupted install.
 	var wantVersion string
 	state := preinstallState{SchemaVersion: 1}
 	for _, p := range preinstalledPlugins {
 		v := p.Version
-		if p.Name == "dsh-file-changes" {
+		if p.Name == "dsh-plugin-diff-review" {
 			wantVersion = p.Version
 			v = "0.0.0"
 		}
@@ -269,7 +350,7 @@ func TestRunPreinstallUpgradesOnVersionBump(t *testing.T) {
 
 	s := loadPreinstallState(preinstallStatePath())
 	for _, ip := range s.Installed {
-		if ip.Name == "dsh-file-changes" && ip.Version == wantVersion {
+		if ip.Name == "dsh-plugin-diff-review" && ip.Version == wantVersion {
 			return
 		}
 	}
@@ -285,28 +366,28 @@ func TestUninstallPreinstalledPlugin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := uninstallPreinstalledPlugin("file-changes", noopLogf); err != nil {
+	if err := uninstallPreinstalledPlugin("diff-review", noopLogf); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
 
 	// Directory removed.
-	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-plugin-diff-review")
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatalf("plugin dir still present after uninstall")
 	}
 	// Patch block removed.
 	raw, _ := os.ReadFile(filepath.Join(dshHome, "profiles", "web", "cordis.patch.yml"))
-	if strings.Contains(string(raw), "id: file-changes") {
+	if strings.Contains(string(raw), "id: diff-review") {
 		t.Fatalf("patch block still present: %s", raw)
 	}
 	// Other plugins remain registered.
-	if !strings.Contains(string(raw), "id: diff-review") {
+	if !strings.Contains(string(raw), "id: open-editor") {
 		t.Fatalf("other plugin lost after uninstall: %s", raw)
 	}
 	// State no longer records it.
 	s := loadPreinstallState(preinstallStatePath())
 	for _, ip := range s.Installed {
-		if ip.Name == "dsh-file-changes" {
+		if ip.Name == "dsh-plugin-diff-review" {
 			t.Fatalf("state still records uninstalled plugin: %+v", s.Installed)
 		}
 	}
@@ -317,6 +398,9 @@ func TestUninstallPreinstalledPlugin(t *testing.T) {
 	}
 }
 
+// A directory this app never installed is user-owned, whichever name it carries.
+// dsh-file-changes is deliberately a retired name here: retirement must spare an
+// unclaimed copy exactly as installation always has.
 func TestRunPreinstallLeavesUserInstallUntouched(t *testing.T) {
 	dshHome := t.TempDir()
 	t.Setenv("DSH_HOME", dshHome)
@@ -394,8 +478,8 @@ func TestRunPreinstallUpgradesMarkerOwnedPluginAfterStateLoss(t *testing.T) {
 		t.Fatalf("drop state file: %v", err)
 	}
 
-	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
-	stale := `{"name":"dsh-file-changes","version":"0.0.0","dsh":{"desktop":{"vendored":true}}}`
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-plugin-diff-review")
+	stale := `{"name":"dsh-plugin-diff-review","version":"0.0.0","dsh":{"desktop":{"vendored":true}}}`
 	if err := os.WriteFile(filepath.Join(target, "package.json"), []byte(stale), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +494,7 @@ func TestRunPreinstallUpgradesMarkerOwnedPluginAfterStateLoss(t *testing.T) {
 
 	var shipped string
 	for _, plugin := range preinstalledPlugins {
-		if plugin.Name == "dsh-file-changes" {
+		if plugin.Name == "dsh-plugin-diff-review" {
 			shipped = plugin.Version
 		}
 	}
@@ -434,11 +518,11 @@ func TestRunPreinstallWarnsAboutUntrackedPlugin(t *testing.T) {
 	t.Setenv("DSH_HOME", dshHome)
 	t.Setenv(stateDirEnv, t.TempDir())
 
-	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-plugin-diff-review")
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	userPkg := `{"name":"dsh-file-changes","version":"9.9.9"}`
+	userPkg := `{"name":"dsh-plugin-diff-review","version":"9.9.9"}`
 	if err := os.WriteFile(filepath.Join(target, "package.json"), []byte(userPkg), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -450,7 +534,7 @@ func TestRunPreinstallWarnsAboutUntrackedPlugin(t *testing.T) {
 	}
 
 	joined := strings.Join(logs, "\n")
-	if !strings.Contains(joined, "dsh-file-changes") || !strings.Contains(joined, target) {
+	if !strings.Contains(joined, "dsh-plugin-diff-review") || !strings.Contains(joined, target) {
 		t.Fatalf("expected a warning naming the plugin and its path, got:\n%s", joined)
 	}
 	raw, err := os.ReadFile(filepath.Join(target, "package.json"))
@@ -471,15 +555,15 @@ func TestRunPreinstallStaysQuietAboutMatchingUntrackedPlugin(t *testing.T) {
 
 	shipped := ""
 	for _, plugin := range preinstalledPlugins {
-		if plugin.Name == "dsh-file-changes" {
+		if plugin.Name == "dsh-plugin-diff-review" {
 			shipped = plugin.Version
 		}
 	}
-	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-plugin-diff-review")
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	userPkg := fmt.Sprintf(`{"name":"dsh-file-changes","version":%q}`, shipped)
+	userPkg := fmt.Sprintf(`{"name":"dsh-plugin-diff-review","version":%q}`, shipped)
 	if err := os.WriteFile(filepath.Join(target, "package.json"), []byte(userPkg), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -490,7 +574,7 @@ func TestRunPreinstallStaysQuietAboutMatchingUntrackedPlugin(t *testing.T) {
 		t.Fatalf("runPreinstall: %v", err)
 	}
 	for _, line := range logs {
-		if strings.Contains(line, "dsh-file-changes") {
+		if strings.Contains(line, "dsh-plugin-diff-review") {
 			t.Fatalf("expected no warning for a matching untracked copy, got: %s", line)
 		}
 	}
@@ -513,7 +597,7 @@ func TestRunPreinstallArmsOwnershipMarkerOnTrackedCopy(t *testing.T) {
 	if _, err := runPreinstall(noopLogf); err != nil {
 		t.Fatal(err)
 	}
-	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-plugin-diff-review")
 	manifest, readable := installedPluginManifest(target)
 	if !readable || !manifest.DSH.Desktop.Vendored {
 		t.Fatal("first install did not carry the ownership marker")
@@ -551,16 +635,16 @@ func TestUninstallPreinstalledPluginUsesOwnershipMarker(t *testing.T) {
 		t.Fatalf("drop state file: %v", err)
 	}
 
-	if err := uninstallPreinstalledPlugin("file-changes", noopLogf); err != nil {
+	if err := uninstallPreinstalledPlugin("diff-review", noopLogf); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
 
-	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-file-changes")
+	target := filepath.Join(dshHome, "profiles", "node_modules", "dsh-plugin-diff-review")
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatal("marker-owned plugin directory survived uninstall")
 	}
 	raw, _ := os.ReadFile(filepath.Join(dshHome, "profiles", "web", "cordis.patch.yml"))
-	if strings.Contains(string(raw), "id: file-changes") {
+	if strings.Contains(string(raw), "id: diff-review") {
 		t.Fatalf("patch block survived uninstall: %s", raw)
 	}
 }

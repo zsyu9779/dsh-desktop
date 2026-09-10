@@ -41,7 +41,7 @@ All sessions, models, plugins, and settings are provided by upstream DeepSeek Ha
 - Native window / Dock icon / app menu
 - Launch splash: status, retry, open in browser, view logs
 - LAN phone remote: scan a QR code on the same Wi-Fi to control the current DeepSeek Harness from a mobile browser
-- Preinstalled plugins: ships diff-review, subagent-max, file-changes and open-editor into the DSH profile at launch, version-tracked and upgradeable
+- Preinstalled plugins: ships open-editor, diff-review, account-login and agent-preset-compat into the DSH profile at launch, version-tracked and upgradeable; the file-changes and subagent-max plugins an earlier release installed are removed on upgrade
 - Auto-installs and pins the DeepSeek Harness version
 - Logs to `~/.dsh-desktop/logs/dsh.log`
 

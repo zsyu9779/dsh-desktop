@@ -98,11 +98,13 @@ func isRemoteAllowedPath(path string) bool {
 	return remoteAllowedEndpoints[strings.TrimPrefix(path, "/api/")]
 }
 
-// preinstalledPluginRoutePrefixes are URL path prefixes registered by the
-// preinstalled DSH plugins (diff-review's git/file routes, file-changes'
-// reveal route). They sit outside the remote endpoint allowlist, so they must
-// be blocked outright over the LAN proxy: safe on the desktop loopback, but
-// never reachable from a paired Device.
+// preinstalledPluginRoutePrefixes are URL path prefixes registered by DSH
+// plugins the shell works with — diff-review's git and file routes, and
+// file-changes' reveal route. They sit outside the remote endpoint allowlist,
+// so they are blocked outright over the LAN proxy: safe on the desktop
+// loopback, but never reachable from a paired Device. The file-changes entry
+// outlives that plugin's preinstallation on purpose: it is a public plugin a
+// person can still install into the same profile.
 var preinstalledPluginRoutePrefixes = []string{
 	"/diff-review/",
 	"/api/file-changes/",

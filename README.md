@@ -36,7 +36,7 @@ DeepSeek Harness Desktop 是 DeepSeek Harness 的桌面启动器和原生容器�
 - **可靠的进程管理**：关闭窗口或退出应用时清理 `npm → pnpm → node → dsh` 进程树。
 - **稳定的窗口恢复**：保留 Wails 原生容器，修复 macOS 最小化后恢复白屏的问题。
 - **局域网手机远程**：同一 Wi-Fi 下扫码即可在手机浏览器操控当前 DeepSeek Harness。
-- **预装常用插件**：启动时把 diff-review、subagent-max、file-changes、open-editor 四个插件装进 DSH profile，并做版本跟踪与升级。
+- **预装常用插件**：启动时把 open-editor、diff-review、account-login、agent-preset-compat 装进 DSH profile，并做版本跟踪与升级；上一个版本预装的 file-changes 与 subagent-max 会在升级时自动移除。
 - **启动状态与错误提示**：显示环境检查、首次下载、服务启动和失败状态。
 - **日志与故障排查**：可在启动页查看日志，也会写入本地日志文件。
 - **可配置工作目录**：支持通过环境变量覆盖命令、工作区和 DSH Home。

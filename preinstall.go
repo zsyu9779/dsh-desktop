@@ -37,34 +37,10 @@ type preinstallPlugin struct {
 }
 
 // preinstalledPlugins is the fixed set of plugins shipped by this build.
-// Order matters: open-editor is listed before diff-review (its dependent), and
+// Order matters: open-editor is listed before diff-review (its dependent — the
+// review surface opens one file at a line through open-editor's route), and
 // each block is appended to cordis.patch.yml in this order.
 var preinstalledPlugins = []preinstallPlugin{
-	{
-		ID:      "file-changes",
-		Name:    "dsh-file-changes",
-		Dir:     "file-changes",
-		Version: "0.2.2",
-		Insert: `- insert:
-    - id: file-changes
-      name: dsh-file-changes
-`,
-	},
-	{
-		ID:      "dsh-subagent-max",
-		Name:    "@aaravarr/dsh-subagent-max",
-		Dir:     "dsh-subagent-max",
-		Version: "0.2.1",
-		Insert: `- insert:
-    - id: dsh-subagent-max
-      name: '@aaravarr/dsh-subagent-max'
-      config:
-        subagentProvider: spawn
-        toolName: subagent_with_model
-        backgroundMode: continuable
-        maxDepth: 3
-`,
-	},
 	{
 		ID:      "open-editor",
 		Name:    "dsh-plugin-open-editor",
@@ -107,6 +83,31 @@ var preinstalledPlugins = []preinstallPlugin{
     - id: agent-preset-compat
       name: dsh-agent-preset-compat
 `,
+	},
+}
+
+// retiredPlugins are plugins an earlier build installed into the DSH profile and
+// this one no longer ships. runPreinstall removes a copy this app owns (the state
+// record or the ownership marker is the claim) together with the cordis.patch.yml
+// row it wrote, so an upgrade does not leave behind a plugin the shell can no
+// longer keep in step with the composition. A copy with no claim is never touched.
+var retiredPlugins = []struct {
+	// ID is the cordis row id the retired plugin was registered under.
+	ID string
+	// Name is the package name, which is also its node_modules directory.
+	Name string
+	// Block is the exact cordis.patch.yml text that registration appended.
+	Block string
+}{
+	{
+		ID:    "file-changes",
+		Name:  "dsh-file-changes",
+		Block: "- insert:\n    - id: file-changes\n      name: dsh-file-changes\n",
+	},
+	{
+		ID:    "dsh-subagent-max",
+		Name:  "@aaravarr/dsh-subagent-max",
+		Block: "- insert:\n    - id: dsh-subagent-max\n      name: '@aaravarr/dsh-subagent-max'\n      config:\n        subagentProvider: spawn\n        toolName: subagent_with_model\n        backgroundMode: continuable\n        maxDepth: 3\n",
 	},
 }
 
@@ -325,6 +326,7 @@ func runPreinstall(logf func(format string, args ...any)) (string, error) {
 	var createdDirs []string
 	var backupPath string
 	changed := 0
+	retired := 0
 
 	for _, p := range preinstalledPlugins {
 		target := filepath.Join(profileModules, filepath.FromSlash(p.Name))
@@ -387,6 +389,32 @@ func runPreinstall(logf func(format string, args ...any)) (string, error) {
 		}
 	}
 
+	for _, p := range retiredPlugins {
+		target := filepath.Join(profileModules, filepath.FromSlash(p.Name))
+		_, tracked := owned[p.Name]
+		manifest, readable := installedPluginManifest(target)
+		marked := readable && manifest.Name == p.Name && manifest.DSH.Desktop.Vendored
+		if !tracked && !marked {
+			continue // never ours, or already retired
+		}
+		if _, err := os.Lstat(target); err == nil {
+			if err := os.RemoveAll(target); err != nil {
+				rollbackPreinstall(createdDirs, backupPath, patchPath)
+				return "", fmt.Errorf("preinstall: retire %s: %w", p.Name, err)
+			}
+			if strings.Contains(p.Name, "/") {
+				// A scoped package leaves its own scope directory behind.
+				_ = os.Remove(filepath.Dir(target))
+			}
+			logf("preinstall: retired %s", p.Name)
+		}
+		delete(owned, p.Name)
+		if err := removePatchBlock(patchPath, p.Block); err != nil {
+			return "", fmt.Errorf("preinstall: retire %s: unpatch: %w", p.Name, err)
+		}
+		retired++
+	}
+
 	for _, row := range disabledUpstreamRows {
 		appended, err := appendPatch(patchPath, row.ID, row.Block, &backupPath)
 		if err != nil {
@@ -398,7 +426,7 @@ func runPreinstall(logf func(format string, args ...any)) (string, error) {
 		}
 	}
 
-	if changed > 0 {
+	if changed > 0 || retired > 0 {
 		entries := make([]installedPlugin, 0, len(owned))
 		for name, version := range owned {
 			entries = append(entries, installedPlugin{Name: name, Version: version})
@@ -410,10 +438,16 @@ func runPreinstall(logf func(format string, args ...any)) (string, error) {
 		}
 	}
 
-	if changed == 0 {
+	switch {
+	case changed > 0 && retired > 0:
+		return fmt.Sprintf("preinstall: installed %d plugin(s), retired %d", changed, retired), nil
+	case retired > 0:
+		return fmt.Sprintf("preinstall: retired %d plugin(s)", retired), nil
+	case changed > 0:
+		return fmt.Sprintf("preinstall: installed %d plugin(s)", changed), nil
+	default:
 		return "preinstall: up to date", nil
 	}
-	return fmt.Sprintf("preinstall: installed %d plugin(s)", changed), nil
 }
 
 // removePatchBlock deletes one insert block (the exact string we appended)
