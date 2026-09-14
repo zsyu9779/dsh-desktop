@@ -67,7 +67,7 @@ Get the installer for your platform from [Releases](https://github.com/zsyu9779/
 - **Windows**: `dsh-desktop.exe` (portable, amd64)
 - **Linux**: `dsh-desktop-linux-amd64.tar.gz`
 
-> macOS Gatekeeper will block an unsigned app on first launch: right-click the app and choose "Open" to allow it, or run
+> macOS packages have been signed with a Developer ID certificate and notarized since v0.1.9; if Gatekeeper still blocks the app, right-click it and choose "Open" to allow it, or run
 > `xattr -d com.apple.quarantine "/Applications/dsh-desktop.app"`.
 
 ## Requirements
