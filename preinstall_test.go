@@ -179,27 +179,47 @@ func TestRunPreinstallInstallsAndIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestRunPreinstallDisablesUnrunnableUpstreamRows(t *testing.T) {
+// A disable an earlier build wrote into the profile patch has to be removed,
+// not merely stopped from being written: the text that keeps an upstream row
+// off lives in the profile, so it survives every later run.
+func TestRunPreinstallRemovesRetiredUpstreamDisables(t *testing.T) {
 	dshHome := t.TempDir()
 	t.Setenv("DSH_HOME", dshHome)
 	t.Setenv(stateDirEnv, t.TempDir())
 
-	if _, err := runPreinstall(noopLogf); err != nil {
-		t.Fatalf("first run: %v", err)
+	patchPath := filepath.Join(dshHome, "profiles", "web", "cordis.patch.yml")
+	if err := os.MkdirAll(filepath.Dir(patchPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seeded := "# seeded by an earlier build\n"
+	for _, row := range undoneUpstreamDisables {
+		seeded += "\n" + row.Block
+	}
+	if err := os.WriteFile(patchPath, []byte(seeded), 0o644); err != nil {
+		t.Fatal(err)
 	}
 
-	patchPath := filepath.Join(dshHome, "profiles", "web", "cordis.patch.yml")
+	if _, err := runPreinstall(noopLogf); err != nil {
+		t.Fatalf("runPreinstall: %v", err)
+	}
+
 	raw, err := os.ReadFile(patchPath)
 	if err != nil {
-		t.Fatalf("patch file missing: %v", err)
+		t.Fatal(err)
 	}
-	for _, row := range disabledUpstreamRows {
-		if !strings.Contains(string(raw), strings.TrimSpace(row.Block)) {
-			t.Fatalf("patch missing disable block for %s:\n%s", row.ID, raw)
+	for _, row := range undoneUpstreamDisables {
+		if strings.Contains(string(raw), row.Block) {
+			t.Fatalf("%s is still disabled in cordis.patch.yml:\n%s", row.ID, raw)
+		}
+	}
+	// The plugins this build ships are still registered alongside them.
+	for _, p := range preinstalledPlugins {
+		if !strings.Contains(string(raw), "id: "+p.ID) {
+			t.Fatalf("shipped plugin %s lost its registration:\n%s", p.Name, raw)
 		}
 	}
 
-	// A second run must leave the block alone rather than append it again.
+	// Re-running must stay quiet and leave the same file.
 	if _, err := runPreinstall(noopLogf); err != nil {
 		t.Fatalf("second run: %v", err)
 	}
@@ -207,10 +227,8 @@ func TestRunPreinstallDisablesUnrunnableUpstreamRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, row := range disabledUpstreamRows {
-		if got := strings.Count(string(raw2), "id: "+row.ID); got != 1 {
-			t.Fatalf("disable block for %s appears %d time(s):\n%s", row.ID, got, raw2)
-		}
+	if string(raw2) != string(raw) {
+		t.Fatalf("second run changed the patch:\n--- before\n%s\n--- after\n%s", raw, raw2)
 	}
 }
 

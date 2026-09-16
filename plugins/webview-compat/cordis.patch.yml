@@ -1,0 +1,6 @@
+# dsh-webview-compat bundle patch: one host-only row.
+# It contributes an index script that defines the iterator-helpers global
+# older WebKit builds lack, before the client module graph evaluates.
+- insert:
+    - id: webview-compat
+      name: 'dsh-webview-compat'

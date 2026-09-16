@@ -84,6 +84,19 @@ var preinstalledPlugins = []preinstallPlugin{
       name: dsh-agent-preset-compat
 `,
 	},
+	{
+		// Defines the iterator-helpers global for WebViews that lack it, so
+		// upstream client bundles that feature-detect it still import.
+		ID:       "webview-compat",
+		Name:     "dsh-webview-compat",
+		Dir:      "webview-compat",
+		Version:  "0.1.0",
+		HostOnly: true,
+		Insert: `- insert:
+    - id: webview-compat
+      name: 'dsh-webview-compat'
+`,
+	},
 }
 
 // retiredPlugins are plugins an earlier build installed into the DSH profile and
@@ -111,19 +124,18 @@ var retiredPlugins = []struct {
 	},
 }
 
-// disabledUpstreamRows are client rows the shipped DSH web composition mounts
-// but this app cannot run. Each is disabled through the same profile patch layer
-// the plugins are registered in, so the rest of the composition — including the
-// surfaces those rows only decorate — keeps working.
+// undoneUpstreamDisables are profile-patch rows an earlier build appended to
+// switch an upstream client row off, and this build no longer wants. Dropping
+// the code that wrote a row is not enough to bring the feature back: a profile
+// that already carries the text keeps the row disabled until it is removed.
 //
-// ui-sidebar-documentpreview: its bundled renderers evaluate the Iterator global,
-// which WebKit gained only in Safari 18.4 / macOS 15.4. On older macOS the whole
-// entry fails to import with "Can't find variable: Iterator", so the right
-// sidebar's document tab is dropped instead of throwing at every boot.
-var disabledUpstreamRows = []struct {
-	// ID is the composition row id to disable.
+// ui-sidebar-documentpreview is re-enabled because dsh-webview-compat now
+// defines the Iterator global its bundle feature-detects; the disable existed
+// only for WebKit that lacks it.
+var undoneUpstreamDisables = []struct {
+	// ID is the composition row id being re-enabled.
 	ID string
-	// Block is the exact cordis.patch.yml text appended for it.
+	// Block is the exact cordis.patch.yml text to remove.
 	Block string
 }{
 	{
@@ -415,15 +427,21 @@ func runPreinstall(logf func(format string, args ...any)) (string, error) {
 		retired++
 	}
 
-	for _, row := range disabledUpstreamRows {
-		appended, err := appendPatch(patchPath, row.ID, row.Block, &backupPath)
+	for _, row := range undoneUpstreamDisables {
+		raw, err := os.ReadFile(patchPath)
 		if err != nil {
-			rollbackPreinstall(createdDirs, backupPath, patchPath)
-			return "", fmt.Errorf("preinstall: disable %s: %w", row.ID, err)
+			if os.IsNotExist(err) {
+				continue
+			}
+			return "", fmt.Errorf("preinstall: re-enable %s: %w", row.ID, err)
 		}
-		if appended {
-			logf("preinstall: disabled %s in cordis.patch.yml", row.ID)
+		if !strings.Contains(string(raw), row.Block) {
+			continue
 		}
+		if err := removePatchBlock(patchPath, row.Block); err != nil {
+			return "", fmt.Errorf("preinstall: re-enable %s: %w", row.ID, err)
+		}
+		logf("preinstall: re-enabled %s in cordis.patch.yml", row.ID)
 	}
 
 	if changed > 0 || retired > 0 {
