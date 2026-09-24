@@ -27,7 +27,7 @@ const (
 	// track a newer release, or set DSH_COMMAND to override the launcher entirely.
 	// The shipped plugins are built against this release, so the pin and the
 	// plugins move together; per-release behaviour belongs in agent_context.md.
-	dshPackage = "@deepseek-ai/dsh@0.1.5-rc.1"
+	dshPackage = "@deepseek-ai/dsh@0.1.5-rc.3"
 
 	// DSH supports Node.js 22 from 22.19 onward and skips the unsupported Node.js
 	// 23 line. The 24 line is supported from 24.2 onward: dsh 0.1.5 runs its CLI

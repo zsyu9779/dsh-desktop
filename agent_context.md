@@ -90,11 +90,12 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 
 ## 6. dsh 内部机制与坑（查源码时很有用）
 
-- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.1.5-rc.1/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
+- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.1.5-rc.3/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
 - `dsh web` = `--profile web` 别名；`dsh-host-webserver` 只允许 host `127.0.0.1` 或 `0.0.0.0`。
 - **0.1.5 起 CLI 入口被 `import.meta.main` 守卫**（`apps/cli/src/bin.ts`）：该特性 Node.js 22.18 / 24.2 才有，在 **24.0/24.1 上整个 CLI 会静默退出**——退出码 0、stdout 无任何输出，壳只会白等到 `readyTimeout` 超时。所以 `isSupportedNodeVersion` 对 24 线要求 minor ≥ 2。
   - 已实测（用壳完全相同的 CLI 参数直接跑 `lib/bin.js`）：Node 24.0.0 与 24.1.0（`import.meta.main === undefined`）× dsh 0.1.5-rc.1 → **exit 0、stdout 0 字节**；同样两个 Node × dsh 0.1.2-rc.1 → 正常打印 URL，说明问题由 0.1.5 引入而非 Node 本身；Node 24.19.0（`true`）× 0.1.5-rc.1 → 正常打印 URL。
 - **旧 WebKit 缺 `Iterator` 全局**：0.1.5 的 `ui-sidebar-documentpreview` 打包产物在模块作用域求值 `Iterator.prototype.join`，WebKit < Safari 18.4（macOS < 15.4）直接 `Can't find variable: Iterator`，整个 client module 导入失败。壳的处理**不是**禁用该模块，而是用预装的 `dsh-webview-compat`（host-only）经 `webserver/index-inject` 往页面注入一段垫片：`Iterator` 缺失时才用 `Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()))` 取到真正的 `%IteratorPrototype%` 再定义 `globalThis.Iterator`——必须挂在真正的原型上，否则库自己补的 `join` 落不到任何迭代器上。注入行渲染在 client module 入口之前（但排在 bundle 注册脚本之后；factory 是延迟执行的，所以够早）。
+- **Wails 的 macOS WebView 打不开新窗口**：Wails v2.11.0 darwin 的 `WailsContext` 声明了 `WKUIDelegate`，却没有实现 `webView:createWebViewWithConfiguration:`（Linux/Windows 侧亦然，见上游 issue #1522）。于是 DSH 会话里渲染成 `<a target="_blank">` 的外链（`dsh-web-frontend` 打包产物 `m5`/`_5` 只对 http(s) 加 `target="_blank"`）点击后**无声无息**：不跳转、不报错。壳侧没有导航钩子，DSH 页面又在独立 loopback origin 上、壳的文档脚本够不到，所以用预装的 `dsh-webview-links`（host-only，`webserver/index-inject`）注入一段脚本：仅当 `window.parent !== window`（即被壳 iframe 嵌入；浏览器直开/手机远程是顶层，保持原生行为）时接管 `a[target=_blank]` 的 http(s) 点击，`preventDefault` 后 `postMessage` 给父页；`frontend/src/main.js` 校验 `event.source === harnessFrame.contentWindow` 与 origin 后调用 `App.OpenExternalURL`，Go 侧只放行 http(s) 再走 `runtime.BrowserOpenURL`（与壳的「在浏览器打开」同一路径）。协议串 `dsh-desktop:open-external` 由 `TestWebviewLinksProtocolMatchesShell` 跨文件钉住。
 - **`--host 0.0.0.0` 被官方硬拒**（`dsh-web-app/lib/startup.js`）：「would expose remote code execution to the network」。所以不能直接绑公网，只能走反代。
 - `/api` trust 栅栏（`dsh-client-connection/lib/index.js` 的 `isTrustedApiRequest`）：Host 必须 loopback 或受信；Origin 必须匹配 Host；`sec-fetch-site` 不能是 cross-site。
 - **0.1.2 起上游已无 `PRIVILEGED_METHODS`**：`/api` 只有「信任围栏 + 浏览器会话 cookie」（`dsh-client-connection` 的 `isTrustedApiRequest` + `BrowserAuth`），敏感面的收敛下移到客户端 `ctx.connection.isLoopback`（按 `location.hostname` 判断，仅 UI 层）。因此手机侧权限**由壳的 allowlist 独占**（见 §5.5 与 `remote.go`）。
@@ -109,7 +110,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 ## 7. 环境事实
 
 - 机器：macOS（arm64），Xcode 26.3，Go 1.26.0，Node v25.8.2。
-- dsh 版本：`@deepseek-ai/dsh@0.1.5-rc.1`（`dsh.go` 的 `dshPackage` 常量固定；运行时可用 `~/.dsh-desktop/config.json` 的 `dshVersion` 覆盖）。
+- dsh 版本：`@deepseek-ai/dsh@0.1.5-rc.3`（`dsh.go` 的 `dshPackage` 常量固定；运行时可用 `~/.dsh-desktop/config.json` 的 `dshVersion` 覆盖）。rc.2 → rc.3 是上游的依赖锁定 hotfix（只改 `pnpm-lock.yaml` + `verify-package-dependencies.ts`）；rc.1 → rc.2 是 feedback 弹窗/交付卡片/文件图标的前端 backport。两者都无 session 格式 / CLI / host / 插件 API 变更，壳与预装插件无需适配。
 - 端口占用：`3080` = 当前 agent session 的 harness（勿杀）；`8787` = 远程代理（HTTPS）；`5173` = vite。
 - 日志：`~/.dsh-desktop/logs/dsh.log`。
 - 桌面壳工作目录：默认用户主目录，可用 `DSH_WORKSPACE` 覆盖，`DSH_HOME` 控制 profiles/存储位置。
@@ -148,3 +149,36 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 - **Go 项目验证 = `gofmt -l` / `go build` / `go vet` / `go test`**；`verify` skill 是 React 专属（yarn/linc/flow），对 Go 不适用。
 - 生成绑定（`frontend/wailsjs/`）在 `wails build`/`wails dev` 时自动刷新；手改 main.js 后跑 `cd frontend && npm run build` 重打 dist。
 - 未跟踪的本地文档（`CONTEXT.md`、`docs/adr/`、`docs/agents/`、`AGENTS.md`、`docs/remote-control-plan.md`）按用户隐私要求保持未提交；是否提交/推送由用户定。
+
+---
+
+## 11. 适配新 DSH 版本时的预装插件审计（用户要求）
+
+**用户要求：每次让其适配最新 DSH 版本时，都必须先检查预装插件里有没有被上游替代、可以卸载的。**
+
+固定流程（改 `dsh.go` 的 `dshPackage` 之前）：
+
+1. 读新版本 release notes 的「新增功能 / 其他变更」，列出可能与预装插件重叠的上游原生能力；
+2. 逐个核对 `preinstall.go` 的 `preinstalledPlugins`（当前：open-editor、diff-review、account-login、webview-compat、webview-links；`agent-preset-compat` 已于 2026-09-24 退役），判断上游是否已原生提供同等能力；
+3. 被替代 / 不再需要的移入 `retiredPlugins`（附确切 `cordis.patch.yml` 卸载块），并更新 `README.md` / `README.en.md` 的插件清单；
+4. 保留的插件核对 peer 范围能否满足新版本（semver 预发布元组规则：跨 minor 的 rc 不满足 `^0.1.5-rc.1`），不能就更新 + 重建 client bundle；
+5. 审计结论记回本节。
+
+**2026-09-24 对 0.1.7-rc.1 的审计（尚未实施，待适配）：**
+
+- `agent-preset-compat`：**已于 2026-09-24 退役**（移入 `retiredPlugins`，`plugins/agent-preset-compat/` 已删）。peer 依赖 `@deepseek-ai/dsh-agent-presets` 已停更（最后版本 0.1.6-alpha.2），0.1.7 改用单数 `@deepseek-ai/dsh-agent-preset`，且 preset 改由插件组合包声明——与它「复制旧目录 preset」的机制冲突。
+- `diff-review`：保留，但要适配两点——(a) 设置卡片注册的 `settings.plugin.item` slot 在 0.1.7 已被删除（0.1.5 有 11 处引用、0.1.7 为 0），需改到 `settings.section` / `settings.plugins.tab`；(b) 上游 0.1.7 原生接管了「会话文件改动卡片 + 侧边栏逐文件对比审阅」，与它能力重叠，是否收窄需产品判断。
+- `open-editor` / `diff-review` 的 peer/dev 范围 `^0.1.5-rc.1`、`^0.1.0-rc.6` 均**不满足** 0.1.7-rc.1（已用 semver 实测），且 0.1.7 新增插件↔DSH 版本兼容性校验 → 必须更新范围并重建。
+- `webview-compat` / `webview-links`：保留。依赖的 `webserver/index-inject` 事件在 0.1.5-rc.1 与 0.1.7-rc.1 都是 4 处引用，未变。
+- `0.1.5-rc.3`（当前 latest）：仅依赖锁定 hotfix（3 commit，只改 `pnpm-lock.yaml` + `verify-package-dependencies.ts`），无 API 变更，不影响插件。
+
+**可卸载性结论（2026-09-24 逐插件复核）：**
+
+- `agent-preset-compat`：**已于 2026-09-24 退役**（`retiredPlugins`）。上游 0.1.7 已无 `@deepseek-ai/dsh-agent-presets`（改为单数 `@deepseek-ai/dsh-agent-preset`），preset 改由插件组合包声明，旧的 `.agent-presets/<id>/` 目录模型需迁移 → 本插件的复制机制失效。本机已确认 0 个 `agentPreset: "code"` 会话。
+- `open-editor`：**不能因上游替代而卸载**。0.1.7 原生 `dsh-client-ui-open-in-app`（会话页头把 workspace 打开到已安装应用 + 预览用默认应用打开文件）已覆盖其主要能力，但 `diff-review` 依赖它的 `/open-editor/open` 路由做「在指定行打开」；只能收窄，不能移除。
+- `diff-review`：**保留**。原生 `dsh-client-ui-deliverables` 只覆盖「会话文件改动」审阅；git 工作区 staged/unstaged/untracked 的 accept/revert + commit/push/PR + AI 审阅仍独有。
+- `webview-compat`：**保留**。0.1.7 的 `client.pdf.js` 仍在模块级求值 `typeof Iterator.prototype.join`（`Iterator` 未定义时同样 ReferenceError）→ 旧 WebKit 仍需垫片。
+- `webview-links`：**保留**。根因是 Wails WebView 无法开新窗口，与 DSH 版本无关。
+- `dsh-account-login`：**保留**。桌面自有的 Host Account / Relay 登录，上游无对应物。
+
+**待核（尚未跑 live）：** `remote.go` 的 `/api/<ns>/<method>` 精确 allowlist 与 `notify.go` 的 mux 解析是否需对齐 0.1.7 的 Remote 双向流/二进制改动。
