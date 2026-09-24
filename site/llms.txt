@@ -9,15 +9,15 @@ Official upstream: https://github.com/deepseek-ai/deepseek-harness
 
 ## Verified project facts
 
-- Current desktop version: 0.1.14, published 2026-09-24.
-- Pinned upstream package: @deepseek-ai/dsh@0.1.5-rc.3.
+- Current desktop version: 0.1.15, published 2026-09-24.
+- Pinned upstream package: @deepseek-ai/dsh@0.1.7-rc.1.
 - Platforms: macOS universal, Windows amd64, Linux amd64.
-- Release packages are approximately 4–11 MB; exact v0.1.14 sizes are listed on GitHub Releases after the automated build completes.
+- Release packages are approximately 4–11 MB; exact v0.1.15 sizes are listed on GitHub Releases after the automated build completes.
 - Runtime requirement: Node.js 22.19+ on the 22.x line, or Node.js 24.2+ on the 24.x line, with npm.
 - Desktop stack: Go and Wails, using the operating system WebView.
 - The project does not fork or reimplement the upstream DSH Web UI.
 - The shell manages environment checks, startup, local port selection, readiness, logs and process cleanup.
-- Version 0.1.14 keeps the pinned upstream DSH runtime at 0.1.5-rc.3, requires Node.js 24.2+ on the 24.x line, and ships preinstalled plugins (open-editor, diff-review, account-login, webview-compat, webview-links) into the DSH profile at launch. webview-compat defines the Iterator global older WebKit lacks, so the right sidebar's document preview works on macOS before 15.4 again; webview-links routes external session links out of the WebView to the system browser through the desktop host. The agent-preset-compat plugin is retired, and the file-changes and subagent-max plugins an earlier release installed are removed on upgrade.
+- Version 0.1.15 pins the upstream DSH runtime to 0.1.7-rc.1, whose client Session model changed to multi-instance sessions: tool-result diff views moved to the Host's workspace/changes endpoints and the settings slot contract changed. Preinstalled plugins (open-editor, diff-review, account-login, webview-compat, webview-links) ship into the DSH profile at launch. diff-review was rebuilt against 0.1.7 and re-scoped to its git working-tree review (staged/unstaged, accept/revert, commit/push/PR, AI review), because 0.1.7's built-in changed-files card now covers the session-change review. webview-compat defines the Iterator global older WebKit lacks; webview-links routes external session links to the system browser. The agent-preset-compat, file-changes and subagent-max plugins are removed on upgrade.
 - The project is not affiliated with DeepSeek AI.
 - macOS packages are signed with a Developer ID certificate and notarized; Windows executables are not code-signed.
 - License: MIT.
@@ -31,6 +31,6 @@ Official upstream: https://github.com/deepseek-ai/deepseek-harness
 - [Frequently asked questions](https://zsyu9779.github.io/dsh-desktop/faq/)
 - [Troubleshooting](https://zsyu9779.github.io/dsh-desktop/troubleshooting/)
 - [Chinese overview / 中文说明](https://zsyu9779.github.io/dsh-desktop/zh/)
-- [v0.1.14 release notes](https://zsyu9779.github.io/dsh-desktop/releases/v0.1.14/)
+- [v0.1.15 release notes](https://zsyu9779.github.io/dsh-desktop/releases/v0.1.15/)
 
 Last reviewed: 2026-09-24.
