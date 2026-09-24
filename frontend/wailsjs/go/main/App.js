@@ -42,6 +42,10 @@ export function Logs() {
   return window['go']['main']['App']['Logs']();
 }
 
+export function OpenExternalURL(arg1) {
+  return window['go']['main']['App']['OpenExternalURL'](arg1);
+}
+
 export function OpenInBrowser() {
   return window['go']['main']['App']['OpenInBrowser']();
 }

@@ -1,0 +1,7 @@
+# dsh-webview-links bundle patch: one host-only row.
+# It contributes an index script that forwards a session's target="_blank"
+# http(s) link clicks to the desktop shell, which opens them in the system
+# browser; the Wails WebView cannot open a new window itself.
+- insert:
+    - id: webview-links
+      name: 'dsh-webview-links'

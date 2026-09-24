@@ -1,7 +1,7 @@
 {
-  "name": "dsh-agent-preset-compat",
+  "name": "dsh-webview-links",
   "version": "0.1.0",
-  "description": "Keep sessions created before DSH renamed the `code` agent preset resumable: alias it to `ptc` in the user preset root.",
+  "description": "Route the external links a session renders as target=\"_blank\" out of the desktop shell's WebView and into the system browser: Wails' macOS WebView cannot open a new window itself.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -17,7 +17,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": "^22.19.0 || >=24.0.0"
+    "node": "^22.19.0 || >=24.2.0"
   },
   "dsh": {
     "desktop": {
@@ -31,13 +31,12 @@
     "dsh",
     "deepseek-harness",
     "dsh-plugin",
-    "agent-preset",
-    "compatibility"
+    "webview",
+    "links"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-agent-presets": "^0.1.2-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/dsh-host-webserver": "^0.1.5-rc.1"
   },
   "license": "MIT"
 }

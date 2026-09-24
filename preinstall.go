@@ -72,19 +72,6 @@ var preinstalledPlugins = []preinstallPlugin{
 `,
 	},
 	{
-		// Keeps sessions recorded before DSH renamed the "code" agent preset
-		// resumable on 0.1.2+ by aliasing it to "ptc" in the user preset root.
-		ID:       "agent-preset-compat",
-		Name:     "dsh-agent-preset-compat",
-		Dir:      "agent-preset-compat",
-		Version:  "0.1.0",
-		HostOnly: true,
-		Insert: `- insert:
-    - id: agent-preset-compat
-      name: dsh-agent-preset-compat
-`,
-	},
-	{
 		// Defines the iterator-helpers global for WebViews that lack it, so
 		// upstream client bundles that feature-detect it still import.
 		ID:       "webview-compat",
@@ -95,6 +82,19 @@ var preinstalledPlugins = []preinstallPlugin{
 		Insert: `- insert:
     - id: webview-compat
       name: 'dsh-webview-compat'
+`,
+	},
+	{
+		// Routes a session's target="_blank" links out of the WebView to the
+		// system browser; Wails' macOS WebView cannot open a new window itself.
+		ID:       "webview-links",
+		Name:     "dsh-webview-links",
+		Dir:      "webview-links",
+		Version:  "0.1.0",
+		HostOnly: true,
+		Insert: `- insert:
+    - id: webview-links
+      name: 'dsh-webview-links'
 `,
 	},
 }
@@ -121,6 +121,14 @@ var retiredPlugins = []struct {
 		ID:    "dsh-subagent-max",
 		Name:  "@aaravarr/dsh-subagent-max",
 		Block: "- insert:\n    - id: dsh-subagent-max\n      name: '@aaravarr/dsh-subagent-max'\n      config:\n        subagentProvider: spawn\n        toolName: subagent_with_model\n        backgroundMode: continuable\n        maxDepth: 3\n",
+	},
+	{
+		// Retired 2026-09-24: DSH 0.1.7 replaced directory agent presets with
+		// plugin composition bundles and renamed dsh-agent-presets to
+		// dsh-agent-preset, so the code->ptc alias no longer applies.
+		ID:    "agent-preset-compat",
+		Name:  "dsh-agent-preset-compat",
+		Block: "- insert:\n    - id: agent-preset-compat\n      name: dsh-agent-preset-compat\n",
 	},
 }
 

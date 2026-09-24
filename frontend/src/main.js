@@ -557,6 +557,19 @@ document.querySelectorAll('.notify-filter-btn').forEach((btn) => {
     });
 });
 
+// External links in a session render as target="_blank". A real browser opens
+// them in a new tab; this app's WKWebView has no new-window handler, so the
+// click is swallowed. The dsh-webview-links plugin injected into DSH catches it
+// and posts the URL here; route it through the Go binding so the system browser
+// opens it — the same path the "在浏览器打开" button uses.
+window.addEventListener('message', (event) => {
+    if (event.source !== harnessFrame.contentWindow) return;
+    if (harnessURL && event.origin !== new URL(harnessURL).origin) return;
+    const message = event.data;
+    if (!message || message.type !== 'dsh-desktop:open-external' || typeof message.url !== 'string') return;
+    App.OpenExternalURL(message.url).catch((err) => console.error(err));
+});
+
 runtime.EventsOn('status', handleStatus);
 runtime.EventsOn('remote', handleRemote);
 runtime.EventsOn('dsh-update', renderUpdate);

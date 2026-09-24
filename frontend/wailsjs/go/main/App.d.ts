@@ -22,6 +22,8 @@ export function ListDevices():Promise<Array<main.deviceIdentity>>;
 
 export function Logs():Promise<string>;
 
+export function OpenExternalURL(arg1:string):Promise<void>;
+
 export function OpenInBrowser():Promise<void>;
 
 export function OpenNodeJS():Promise<void>;

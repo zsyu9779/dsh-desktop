@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -203,6 +205,48 @@ func (a *App) OpenInBrowser() {
 // OpenNodeJS opens the Node.js download page in the system browser.
 func (a *App) OpenNodeJS() {
 	runtime.BrowserOpenURL(a.ctx, "https://nodejs.org")
+}
+
+// validateExternalURL narrows a URL arriving from the embedded page to the two
+// schemes a browser launch may carry. The bridge below is reachable by anything
+// running inside the DSH frame, so file:, javascript:, and arbitrary app
+// schemes stop here rather than at the OS opener.
+func validateExternalURL(raw string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", fmt.Errorf("无法解析链接: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("只允许打开 HTTP(S) 链接")
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("链接缺少主机名")
+	}
+	return parsed.String(), nil
+}
+
+// OpenExternalURL hands an http(s) URL from the embedded DSH page to the
+// system's default browser.
+//
+// DSH renders every external Markdown link as target="_blank". A real browser
+// answers that with a new tab; this app's WebView does not, because Wails v2's
+// macOS side declares a WKUIDelegate that implements no new-window callback, so
+// the click is swallowed with no navigation and no error. There is no shell-side
+// navigation hook to fix that, and the DSH page lives on its own loopback origin
+// the shell document cannot script. The dsh-webview-links plugin injected into
+// DSH therefore intercepts those clicks and forwards the URL to the parent frame;
+// frontend/src/main.js relays it here, onto the same runtime.BrowserOpenURL path
+// the shell's own “在浏览器打开” button already uses.
+func (a *App) OpenExternalURL(rawURL string) error {
+	target, err := validateExternalURL(rawURL)
+	if err != nil {
+		return err
+	}
+	if a.ctx == nil {
+		return fmt.Errorf("Host 尚未启动")
+	}
+	runtime.BrowserOpenURL(a.ctx, target)
+	return nil
 }
 
 // Logs returns recent DeepSeek Harness log lines.
