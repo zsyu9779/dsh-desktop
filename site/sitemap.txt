@@ -12,3 +12,4 @@ https://zsyu9779.github.io/dsh-desktop/releases/v0.1.6/
 https://zsyu9779.github.io/dsh-desktop/releases/v0.1.7/
 https://zsyu9779.github.io/dsh-desktop/releases/v0.1.12/
 https://zsyu9779.github.io/dsh-desktop/releases/v0.1.13/
+https://zsyu9779.github.io/dsh-desktop/releases/v0.1.14/
