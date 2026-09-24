@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-diff-review",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Codex-style diff review for DeepSeek Harness: review every uncommitted change of the current project (staged, unstaged and untracked), inspect per-file unified diffs, and accept (stage) or revert (discard) changes — one file at a time or all at once.",
   "contributors": [
     "Civitasv"

@@ -90,7 +90,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 
 ## 6. dsh 内部机制与坑（查源码时很有用）
 
-- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.1.5-rc.3/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
+- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.1.7-rc.1/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
 - `dsh web` = `--profile web` 别名；`dsh-host-webserver` 只允许 host `127.0.0.1` 或 `0.0.0.0`。
 - **0.1.5 起 CLI 入口被 `import.meta.main` 守卫**（`apps/cli/src/bin.ts`）：该特性 Node.js 22.18 / 24.2 才有，在 **24.0/24.1 上整个 CLI 会静默退出**——退出码 0、stdout 无任何输出，壳只会白等到 `readyTimeout` 超时。所以 `isSupportedNodeVersion` 对 24 线要求 minor ≥ 2。
   - 已实测（用壳完全相同的 CLI 参数直接跑 `lib/bin.js`）：Node 24.0.0 与 24.1.0（`import.meta.main === undefined`）× dsh 0.1.5-rc.1 → **exit 0、stdout 0 字节**；同样两个 Node × dsh 0.1.2-rc.1 → 正常打印 URL，说明问题由 0.1.5 引入而非 Node 本身；Node 24.19.0（`true`）× 0.1.5-rc.1 → 正常打印 URL。
@@ -110,7 +110,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 ## 7. 环境事实
 
 - 机器：macOS（arm64），Xcode 26.3，Go 1.26.0，Node v25.8.2。
-- dsh 版本：`@deepseek-ai/dsh@0.1.5-rc.3`（`dsh.go` 的 `dshPackage` 常量固定；运行时可用 `~/.dsh-desktop/config.json` 的 `dshVersion` 覆盖）。rc.2 → rc.3 是上游的依赖锁定 hotfix（只改 `pnpm-lock.yaml` + `verify-package-dependencies.ts`）；rc.1 → rc.2 是 feedback 弹窗/交付卡片/文件图标的前端 backport。两者都无 session 格式 / CLI / host / 插件 API 变更，壳与预装插件无需适配。
+- dsh 版本：`@deepseek-ai/dsh@0.1.7-rc.1`（`dsh.go` 的 `dshPackage` 常量固定；运行时可用 `~/.dsh-desktop/config.json` 的 `dshVersion` 覆盖）。0.1.5-rc.3 → 0.1.7-rc.1 是破坏性版本：客户端 Session 改为多实例（`SessionStandardProps` 去掉 `nodes`/`current`，新增 `useConversation`/`useProjection`），`ToolResultNode.resultView/callView` 删除，`settings.plugin.item` 删除。预装插件需按 §11 适配。
 - 端口占用：`3080` = 当前 agent session 的 harness（勿杀）；`8787` = 远程代理（HTTPS）；`5173` = vite。
 - 日志：`~/.dsh-desktop/logs/dsh.log`。
 - 桌面壳工作目录：默认用户主目录，可用 `DSH_WORKSPACE` 覆盖，`DSH_HOME` 控制 profiles/存储位置。
@@ -168,7 +168,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 
 - `agent-preset-compat`：**已于 2026-09-24 退役**（移入 `retiredPlugins`，`plugins/agent-preset-compat/` 已删）。peer 依赖 `@deepseek-ai/dsh-agent-presets` 已停更（最后版本 0.1.6-alpha.2），0.1.7 改用单数 `@deepseek-ai/dsh-agent-preset`，且 preset 改由插件组合包声明——与它「复制旧目录 preset」的机制冲突。
 - `diff-review`：保留，但要适配两点——(a) 设置卡片注册的 `settings.plugin.item` slot 在 0.1.7 已被删除（0.1.5 有 11 处引用、0.1.7 为 0），需改到 `settings.section` / `settings.plugins.tab`；(b) 上游 0.1.7 原生接管了「会话文件改动卡片 + 侧边栏逐文件对比审阅」，与它能力重叠，是否收窄需产品判断。
-- `open-editor` / `diff-review` 的 peer/dev 范围 `^0.1.5-rc.1`、`^0.1.0-rc.6` 均**不满足** 0.1.7-rc.1（已用 semver 实测），且 0.1.7 新增插件↔DSH 版本兼容性校验 → 必须更新范围并重建。
+- 0.1.7 的插件↔DSH 兼容校验用 `semver.satisfies(..., { includePrerelease: true })`（见 `boot/app-boot/src/plugin-compatibility.ts`），实测旧的 `^0.1.5-rc.1` / `^0.1.2-rc.1` 均**满足** `0.1.7-rc.1` → **peer 范围不用改，不会被拒**。
 - `webview-compat` / `webview-links`：保留。依赖的 `webserver/index-inject` 事件在 0.1.5-rc.1 与 0.1.7-rc.1 都是 4 处引用，未变。
 - `0.1.5-rc.3`（当前 latest）：仅依赖锁定 hotfix（3 commit，只改 `pnpm-lock.yaml` + `verify-package-dependencies.ts`），无 API 变更，不影响插件。
 
@@ -182,3 +182,11 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 - `dsh-account-login`：**保留**。桌面自有的 Host Account / Relay 登录，上游无对应物。
 
 **待核（尚未跑 live）：** `remote.go` 的 `/api/<ns>/<method>` 精确 allowlist 与 `notify.go` 的 mux 解析是否需对齐 0.1.7 的 Remote 双向流/二进制改动。
+
+**2026-09-24 实施与验证结果（0.1.7-rc.1）：**
+
+- 适配完成：`dsh.go` pin → `@deepseek-ai/dsh@0.1.7-rc.1`；`diff-review` 用本地源码（`~/dsh-plugin-src/dsh-plugin-diff-review`）移植到 0.1.7 并 vendor（版本 0.1.2，重建 `client.js` + `dist/index.js`，client build 把 `@deepseek-ai/dsh-client-store` 设为 external）。
+- 收窄：会话变更交由上游 `@deepseek-ai/dsh-client-ui-deliverables` 原生实现；diff-review 保留 git 工作区审阅 + 评论 dock + review-package 渲染 + `settings.plugins.tab`。放弃了「选中文本加入对话」入口（0.1.7 的 `SessionListState` 无 `current`，root scope 的 `shell.overlay` 无 `sessionId`）。
+- 验证证据：`npx tsc --noEmit` 0 错误、`npm run build` 通过；桌面 `go build` / `go test` 全绿；隔离 `DSH_HOME` 下真跑 `dsh@0.1.7-rc.1` 到达 ready，Chrome DevTools 打开 UI **零插件控制台错误**（移植前是 `list slot "conversation.chat.turnTail" requires options.id`）。
+- 兼容性校验用 `includePrerelease: true`，旧 peer 范围无需改；所有 `dsh.client.inject` 包在 0.1.7 均存在。
+- 未覆盖：diff-review 工作区审阅的实际点选交互（只验证了加载与注册无错）；`remote.go`/`notify.go` 走通用代理路径，未单独回归。

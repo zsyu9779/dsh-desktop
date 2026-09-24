@@ -55,7 +55,7 @@ var preinstalledPlugins = []preinstallPlugin{
 		ID:      "diff-review",
 		Name:    "dsh-plugin-diff-review",
 		Dir:     "diff-review",
-		Version: "0.1.1",
+		Version: "0.1.2",
 		Insert: `- insert:
     - id: diff-review
       name: dsh-plugin-diff-review

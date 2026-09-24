@@ -807,7 +807,7 @@ async function reviewAction(ctx, config, raw) {
     const stream = llm.stream({
       provider: model.provider,
       model: model.model,
-      messages: [createUserMessage({ content: [{ type: "text", text }], source: { kind: "plugin", plugin: "diff-review" } })],
+      messages: [createUserMessage({ content: [{ type: "text", text }], source: { kind: "diff-review" } })],
       system: REVIEW_SYSTEM_PROMPT,
       temperature: 0,
       maxTokens: 8192

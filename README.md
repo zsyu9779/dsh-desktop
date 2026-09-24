@@ -105,7 +105,7 @@ DeepSeek Harness Desktop (Wails / Go)
         └── Local Web UI on 127.0.0.1
 ```
 
-应用默认固定上游版本 `@deepseek-ai/dsh@0.1.5-rc.3`，避免每次启动因上游最新版变化而产生不可预测的行为。
+应用默认固定上游版本 `@deepseek-ai/dsh@0.1.7-rc.1`，避免每次启动因上游最新版变化而产生不可预测的行为。
 
 ## 配置
 
