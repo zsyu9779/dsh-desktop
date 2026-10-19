@@ -77,7 +77,7 @@ var preinstalledPlugins = []preinstallPlugin{
 		ID:       "webview-compat",
 		Name:     "dsh-webview-compat",
 		Dir:      "webview-compat",
-		Version:  "0.1.0",
+		Version:  "0.1.1",
 		HostOnly: true,
 		Insert: `- insert:
     - id: webview-compat
@@ -90,7 +90,7 @@ var preinstalledPlugins = []preinstallPlugin{
 		ID:       "webview-links",
 		Name:     "dsh-webview-links",
 		Dir:      "webview-links",
-		Version:  "0.1.0",
+		Version:  "0.1.1",
 		HostOnly: true,
 		Insert: `- insert:
     - id: webview-links

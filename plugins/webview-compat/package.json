@@ -1,6 +1,6 @@
 {
   "name": "dsh-webview-compat",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Make upstream client bundles that assume a newer WebKit run on the desktop shell's WebView: define the iterator-helpers global they feature-detect before the module graph loads.",
   "type": "module",
   "main": "lib/index.js",
@@ -36,7 +36,7 @@
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-host-webserver": "^0.1.5-rc.1"
+    "@deepseek-ai/dsh-host-webserver": "^0.1.5-rc.1 || ^0.2.0-rc.2"
   },
   "license": "MIT"
 }
