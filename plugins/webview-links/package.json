@@ -1,7 +1,7 @@
 {
   "name": "dsh-webview-links",
-  "version": "0.1.1",
-  "description": "Route the external links a session renders as target=\"_blank\" out of the desktop shell's WebView and into the system browser: Wails' macOS WebView cannot open a new window itself.",
+  "version": "0.1.2",
+  "description": "Route the external links a session opens out of the desktop shell's WebView and into the system browser: Wails' macOS WebView cannot open a new window itself, and DSH >= 0.2 opens them through window.open.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

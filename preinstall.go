@@ -85,12 +85,12 @@ var preinstalledPlugins = []preinstallPlugin{
 `,
 	},
 	{
-		// Routes a session's target="_blank" links out of the WebView to the
-		// system browser; Wails' macOS WebView cannot open a new window itself.
+		// Routes a session's external links out of the WebView to the system
+		// browser; Wails' macOS WebView cannot answer window.open or _blank.
 		ID:       "webview-links",
 		Name:     "dsh-webview-links",
 		Dir:      "webview-links",
-		Version:  "0.1.1",
+		Version:  "0.1.2",
 		HostOnly: true,
 		Insert: `- insert:
     - id: webview-links

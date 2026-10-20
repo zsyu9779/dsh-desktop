@@ -42,6 +42,20 @@ func TestWebviewLinksProtocolMatchesShell(t *testing.T) {
 	if !strings.Contains(string(plugin), message) {
 		t.Fatalf("webview-links does not post the %q message", message)
 	}
+	// DSH >= 0.2 opens an external link from its own onClick: preventDefault()
+	// then window.open(). Wails' WKWebView has no new-window delegate, so that
+	// call lands nowhere; the plugin has to redirect window.open itself or the
+	// bridge silently degrades to dead links again.
+	if !strings.Contains(string(plugin), "window.open = function") {
+		t.Fatal("webview-links must override window.open for the DSH >= 0.2 link path")
+	}
+	// The bubble-phase fallback still covers clients that render a plain
+	// target=_blank anchor with no onClick of their own.
+	for _, hook := range []string{"'click'", "'auxclick'"} {
+		if !strings.Contains(string(plugin), hook) {
+			t.Fatalf("webview-links lost its %s fallback listener", hook)
+		}
+	}
 
 	script, err := os.ReadFile("frontend/src/main.js")
 	if err != nil {

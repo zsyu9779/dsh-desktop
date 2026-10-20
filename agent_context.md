@@ -198,3 +198,14 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 - 插件源码用 `~/dsh-plugin-src/*` 的 `dsh-0.2.1` 分支、依赖升到 0.2.1-rc.2：`tsc --noEmit` 0 错误、`npm run build` 通过；`diff-review` 的 0.2.1 构建产物与 vendored 版**逐字节相同**，无需重 vendor；`open-editor` 既有 vendored 版可继续用。
 - 验证：隔离 `DSH_HOME` 真跑 `dsh@0.2.1-rc.2` 到达 ready，Chrome DevTools 打开 UI **零插件控制台错误**；桌面 `go build` / `go test` 全绿。
 - 首次下载注意：0.2.1 依赖较大，慢网络下 3 分钟 `readyTimeout` 可能不够，需先预热 pnpm dlx 缓存。
+
+**2026-10-20 修复 DSH 0.2.x 外链回归（webview-links 0.1.2）：**
+
+- 症状：升级到 DSH 0.2.x 后，会话里的外链点击不再拉起系统浏览器（壳与 DSH 本身都正常启动）。
+- 根因：0.2.x 的 `dsh-client-ui-chat` 给 Markdown 外链装了 `onClick`——`preventDefault()` 后按 linkOpening 设置调 `window.open(url, "_blank", "noopener,noreferrer")`（"sidebar" 模式走应用内标签页，不调 `window.open`）。Wails WKWebView 没有 `createWebViewWithConfiguration`，`window.open` 落空；而 `webview-links` 原监听在冒泡阶段、见 `defaultPrevented` 就让位，于是整条桥断掉。
+- 修复：注入脚本改为 **override `window.open`**（http(s) 转发父页，其余走原生），保留冒泡阶段的 `_blank` 兜底（只处理没有被应用 claim 的点击），因此 "sidebar" 模式不受影响。`webserver/index-inject` 注入点与 `{kind:'script',placement:'head',text}` 行结构在 0.2.0-rc.2 / 0.2.1-rc.2 未变，且已实际拉取 0.2.0-rc.2 的 index 确认脚本落在 `<head>`。
+- 版本：`webview-links` 0.1.1 → 0.1.2；`TestWebviewLinksProtocolMatchesShell` 增加 `window.open` override 与 click/auxclick 兜底断言。
+- 验证：Node 行为测试覆盖「顶层不接管 / 嵌入转发 window.open / 非 http 走原生 / 未 claim 的 _blank 转发 / 已 claim 让位 / mailto 不转发」全通过；桌面 `go vet` / `go test` 全绿。
+- 下次适配必查：0.2.x 客户端插件体系改为 `window.__ModuleLoader__` 队列；若上游以后原生提供 shell 可注入的外链打开钩子，应退役 `webview-links`。
+- 顺带修复：`~/.dsh/profiles/web/cordis.patch.yml` 的 account-login 行被写成 `name: dsh-account-login# 让模型…`（注释黏在标量上，YAML 里 `#` 前无空格不算注释），导致 0.2.x 启动报 `account-login: failed to import`。已修好用户 profile（备份 `cordis.patch.yml.bak-2026-10-20-webview-links`）。
+
