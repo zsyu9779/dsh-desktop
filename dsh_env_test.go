@@ -11,7 +11,7 @@ import (
 // testNodeInstall mirrors a plausible nodeInstallation for buildCommand, which
 // never executes the child so the paths only need to be non-empty.
 func testNodeInstall() nodeInstallation {
-	return nodeInstallation{nodePath: "/usr/local/bin/node", npmPath: "/usr/local/bin/npm", version: "22.19.0"}
+	return nodeInstallation{nodePath: "/usr/local/bin/node", npmPath: "/usr/local/bin/npm", version: "24.9.0"}
 }
 
 func TestBuildCommandExposesDSHWorkspace(t *testing.T) {

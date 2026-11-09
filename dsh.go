@@ -27,16 +27,14 @@ const (
 	// track a newer release, or set DSH_COMMAND to override the launcher entirely.
 	// The shipped plugins are built against this release, so the pin and the
 	// plugins move together; per-release behaviour belongs in agent_context.md.
-	dshPackage = "@deepseek-ai/dsh@0.2.1-rc.2"
+	dshPackage = "@deepseek-ai/dsh@0.2.2-rc.1"
 
-	// DSH supports Node.js 22 from 22.19 onward and skips the unsupported Node.js
-	// 23 line. The 24 line is supported from 24.2 onward: dsh 0.1.5 runs its CLI
-	// only when `import.meta.main` is set — a property Node.js added in 22.18 and
-	// 24.2 — so on 24.0/24.1 the child starts, prints nothing, and exits, leaving
-	// the shell to time out with no diagnostic.
-	minimumNodeVersion   = "22.19.0"
-	minimumNode24Version = "24.2.0"
-	pnpmPackage          = "pnpm@11.7.0"
+	// dsh 0.2.2 declares `engines.node >= 24.9.0`: the 22.x line and Node.js 23
+	// are no longer supported upstream, so the gate is a single floor. Node.js
+	// 24.0/24.1 also lacked `import.meta.main` (added in 24.2), which older dsh
+	// entries guarded on; that is below this floor too.
+	minimumNodeVersion = "24.9.0"
+	pnpmPackage        = "pnpm@11.7.0"
 
 	// preferredPort keeps the origin stable across launches so the web UI's
 	// localStorage (settings, etc.) persists. We fall back to a random free port
@@ -850,7 +848,7 @@ func workspaceDir() string {
 func (m *dshManager) checkEnvironment() (nodeInstallation, error) {
 	install, err := findCompatibleNodeInstallation(nodeCandidateDirs())
 	if err != nil {
-		return nodeInstallation{}, fmt.Errorf("未检测到兼容的 Node.js 与 npm。请安装 Node.js %s 及更高的 22.x 版本，或 %s 及更高的 24.x 版本（https://nodejs.org）后重新打开本应用: %w", minimumNodeVersion, minimumNode24Version, err)
+		return nodeInstallation{}, fmt.Errorf("未检测到兼容的 Node.js 与 npm。请安装 Node.js %s 或更高版本（https://nodejs.org）后重新打开本应用: %w", minimumNodeVersion, err)
 	}
 	m.logf("node: %s (%s)", install.nodePath, install.version)
 	m.logf("npm: %s", install.npmPath)
@@ -907,30 +905,23 @@ func findCompatibleNodeInstallation(dirs []string) (nodeInstallation, error) {
 	return nodeInstallation{}, fmt.Errorf("未找到 Node.js 可执行文件")
 }
 
-// isSupportedNodeVersion reports whether a runtime can run the pinned dsh. Each
-// supported major line carries its own minimum minor, the line between them
-// (Node.js 23) is skipped, and anything above the highest floor is supported
-// outright. The floors are parsed from the constants the recovery message
-// quotes, so the gate and the advice cannot drift apart.
+// isSupportedNodeVersion reports whether a runtime can run the pinned dsh. The
+// floor is parsed from the constant the recovery message quotes, so the gate and
+// the advice cannot drift apart: anything below it is rejected, a later major is
+// supported outright, and the floor's own major must clear the minimum minor.
 func isSupportedNodeVersion(version string) bool {
 	var major, minor, patch int
 	if _, err := fmt.Sscanf(version, "v%d.%d.%d", &major, &minor, &patch); err != nil {
 		return false
 	}
-	highest := 0
-	for _, floor := range []string{minimumNodeVersion, minimumNode24Version} {
-		var floorMajor, floorMinor, floorPatch int
-		if _, err := fmt.Sscanf(floor, "%d.%d.%d", &floorMajor, &floorMinor, &floorPatch); err != nil {
-			continue
-		}
-		if major == floorMajor {
-			return minor >= floorMinor
-		}
-		if floorMajor > highest {
-			highest = floorMajor
-		}
+	var floorMajor, floorMinor, floorPatch int
+	if _, err := fmt.Sscanf(minimumNodeVersion, "%d.%d.%d", &floorMajor, &floorMinor, &floorPatch); err != nil {
+		return false
 	}
-	return major > highest
+	if major != floorMajor {
+		return major > floorMajor
+	}
+	return minor >= floorMinor
 }
 
 // findPort returns the preferred port if free, otherwise a random free port.

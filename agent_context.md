@@ -29,6 +29,7 @@
 - **验证**：`go test ./...` 14 个用例全过；`cd frontend && npm run build`（vite）成功。
 - **未跟踪的本地文档**（按用户隐私要求保持未提交，是否提交由用户定）：`CONTEXT.md`、`docs/adr/`、`docs/agents/`、`AGENTS.md`、`docs/remote-control-plan.md`。
 - **可删残留**：`session-522.jsonl.zstd.orig.bak`（未跟踪，非本工作线产物）。
+- **「手机远程」入口暂时隐藏**（2026-11-09，用户要求「暂时用不到」）：`frontend/src/main.js` 里 `REMOTE_PANEL_ENTRY_ENABLED = false` 让右上角悬浮入口不再出现；面板 / 配对 / relay 逻辑一行未删。恢复入口只需把开关改回 `true`，再 `cd frontend && npm run build` + `wails build`。
 
 ---
 
@@ -90,7 +91,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 
 ## 6. dsh 内部机制与坑（查源码时很有用）
 
-- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.2.1-rc.2/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
+- dsh 源码位于 pnpm 的内容寻址 store，哈希目录不稳定；可用 `find ~/.dsh-desktop/pnpm-store-v1 -path '*/links/@deepseek-ai/dsh/0.2.2-rc.1/*/node_modules/@deepseek-ai/dsh'` 定位当前包，不要硬编码 dlx/store 哈希。
 - `dsh web` = `--profile web` 别名；`dsh-host-webserver` 只允许 host `127.0.0.1` 或 `0.0.0.0`。
 - **0.1.5 起 CLI 入口被 `import.meta.main` 守卫**（`apps/cli/src/bin.ts`）：该特性 Node.js 22.18 / 24.2 才有，在 **24.0/24.1 上整个 CLI 会静默退出**——退出码 0、stdout 无任何输出，壳只会白等到 `readyTimeout` 超时。所以 `isSupportedNodeVersion` 对 24 线要求 minor ≥ 2。
   - 已实测（用壳完全相同的 CLI 参数直接跑 `lib/bin.js`）：Node 24.0.0 与 24.1.0（`import.meta.main === undefined`）× dsh 0.1.5-rc.1 → **exit 0、stdout 0 字节**；同样两个 Node × dsh 0.1.2-rc.1 → 正常打印 URL，说明问题由 0.1.5 引入而非 Node 本身；Node 24.19.0（`true`）× 0.1.5-rc.1 → 正常打印 URL。
@@ -110,7 +111,7 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 ## 7. 环境事实
 
 - 机器：macOS（arm64），Xcode 26.3，Go 1.26.0，Node v25.8.2。
-- dsh 版本：`@deepseek-ai/dsh@0.2.1-rc.2`（`dsh.go` 的 `dshPackage` 常量固定；运行时可用 `~/.dsh-desktop/config.json` 的 `dshVersion` 覆盖）。0.2.1 起插件兼容判断改为「`engines.dsh` 优先，未声明时看 dsh peers」；peer 范围 `^0.1.x` 不再满足 `0.2.x`，`webview-*` 已改为 `^0.1.5-rc.1 || ^0.2.0-rc.2`。0.1.7 的客户端 Session 多实例改造（`useConversation`/`useProjection`，删除 `nodes`/`current`/`resultView`/`settings.plugin.item`）仍然生效。
+- dsh 版本：`@deepseek-ai/dsh@0.2.2-rc.1`（`dsh.go` 的 `dshPackage` 常量固定；运行时可用 `~/.dsh-desktop/config.json` 的 `dshVersion` 覆盖）。0.2.2 起上游 `engines.node >= 24.9.0`，壳的 Node 门禁已收敛为单一 floor `minimumNodeVersion = "24.9.0"`（不再支持 22.x / 23 / 24.2–24.8）。0.2.1 起插件兼容判断改为「`engines.dsh` 优先，未声明时看 dsh peers」；`webview-*` 的 peer 为 `^0.1.5-rc.1 || ^0.2.0-rc.2`。0.1.7 的客户端 Session 多实例改造仍然生效。
 - 端口占用：`3080` = 当前 agent session 的 harness（勿杀）；`8787` = 远程代理（HTTPS）；`5173` = vite。
 - 日志：`~/.dsh-desktop/logs/dsh.log`。
 - 桌面壳工作目录：默认用户主目录，可用 `DSH_WORKSPACE` 覆盖，`DSH_HOME` 控制 profiles/存储位置。
@@ -208,4 +209,13 @@ M1 的「单 token + 明文 HTTP + 全权限」升级为：
 - 验证：Node 行为测试覆盖「顶层不接管 / 嵌入转发 window.open / 非 http 走原生 / 未 claim 的 _blank 转发 / 已 claim 让位 / mailto 不转发」全通过；桌面 `go vet` / `go test` 全绿。
 - 下次适配必查：0.2.x 客户端插件体系改为 `window.__ModuleLoader__` 队列；若上游以后原生提供 shell 可注入的外链打开钩子，应退役 `webview-links`。
 - 顺带修复：`~/.dsh/profiles/web/cordis.patch.yml` 的 account-login 行被写成 `name: dsh-account-login# 让模型…`（注释黏在标量上，YAML 里 `#` 前无空格不算注释），导致 0.2.x 启动报 `account-login: failed to import`。已修好用户 profile（备份 `cordis.patch.yml.bak-2026-10-20-webview-links`）。
+
+**2026-11-09 适配 0.2.2-rc.1（desktop v0.1.18）：**
+
+- `dsh.go` pin → `@deepseek-ai/dsh@0.2.2-rc.1`。
+- **唯一的破坏性项是 Node 基线**：上游 `engines.node` 从「22.19+ / 24.2+」提高到 `>= 24.9.0`。壳侧把 `minimumNodeVersion`/`minimumNode24Version` 两个 floor 收敛成单一 `minimumNodeVersion = "24.9.0"`，`isSupportedNodeVersion` 简化成「同 major 比 minor，否则比 major」，错误提示与 README（中英）同步。
+- 插件源码（`~/dsh-plugin-src/*` 分支 `dsh-0.2.2`）依赖升到 0.2.2-rc.1：两个插件 `tsc --noEmit` 均 0 错误；`diff-review` 重建产物与 vendored 版**逐字节相同**，`open-editor` 仅 client bundle 有既有差异，因此**没有重新 vendor**。5 个预装插件按 0.2.2 的兼容规则模拟全部 `compatible`。
+- 已核实未变的接口：`webserver/index-inject` 火在 `dsh-client-modules@0.2.2-rc.1` 里仍存在；`dsh web` 的 `--no-open/--host/--port/--trusted-host` 参数仍在。
+- 验证：隔离 `DSH_HOME` 真跑 `dsh@0.2.2-rc.1` 到达 ready（4s），Chrome DevTools 打开 UI **零插件控制台错误**；桌面 `go build` / `go test` 全绿。
+- 未覆盖：0.2.2 的 Cordis 4.1 / Loader 1.1 / PTC birpc / Session Projection 异步化等改动只在本仓库外部插件范围内验证过 tsc 与加载，没有做功能级回归。
 

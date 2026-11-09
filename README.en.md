@@ -73,7 +73,7 @@ Get the installer for your platform from [Releases](https://github.com/zsyu9779/
 ## Requirements
 
 - Go 1.23+
-- Node.js 22.19+ on the 22.x line, or Node.js 24.2+ on the 24.x line
+- Node.js 24.9+ (upstream DSH 0.2.2 requires Node.js 24.9 or newer)
 - Wails v2: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 
 ## Build

@@ -15,18 +15,16 @@ func TestIsSupportedNodeVersion(t *testing.T) {
 		version   string
 		supported bool
 	}{
-		{name: "minimum supported 22", version: "v22.19.0", supported: true},
-		{name: "newer 22", version: "v22.20.1", supported: true},
-		{name: "older 22", version: "v22.18.9", supported: false},
-		{name: "unsupported 23", version: "v23.11.1", supported: false},
-		// 24.0/24.1 lack import.meta.main, which dsh 0.1.5's CLI entry guards on.
-		{name: "24 before import.meta.main", version: "v24.0.0", supported: false},
-		{name: "24.1 before import.meta.main", version: "v24.1.9", supported: false},
-		{name: "24 at import.meta.main", version: "v24.2.0", supported: true},
+		// dsh 0.2.2 declares engines.node >= 24.9.0.
+		{name: "minimum supported", version: "v24.9.0", supported: true},
 		{name: "newer 24", version: "v24.19.0", supported: true},
+		{name: "24 below the floor", version: "v24.8.9", supported: false},
+		{name: "24.2 is no longer enough", version: "v24.2.0", supported: false},
+		{name: "old 22 line", version: "v22.19.0", supported: false},
+		{name: "unsupported 23", version: "v23.11.1", supported: false},
 		{name: "supported future major", version: "v25.0.0", supported: true},
 		{name: "unsupported old major", version: "v20.20.0", supported: false},
-		{name: "invalid version", version: "22.19.0", supported: false},
+		{name: "invalid version", version: "24.9.0", supported: false},
 	}
 
 	for _, tt := range tests {
@@ -49,7 +47,7 @@ func TestFindCompatibleNodeInstallationSkipsOlderNode(t *testing.T) {
 	newDir := filepath.Join(t.TempDir(), "node-24", "bin")
 	writeExecutable(t, filepath.Join(oldDir, "node"), "#!/bin/sh\necho v20.20.0\n")
 	writeExecutable(t, filepath.Join(oldDir, "npm"), "#!/bin/sh\nexit 0\n")
-	writeExecutable(t, filepath.Join(newDir, "node"), "#!/bin/sh\necho v24.3.0\n")
+	writeExecutable(t, filepath.Join(newDir, "node"), "#!/bin/sh\necho v24.10.0\n")
 	writeExecutable(t, filepath.Join(newDir, "npm"), "#!/bin/sh\nexit 0\n")
 
 	install, err := findCompatibleNodeInstallation([]string{oldDir, newDir})
@@ -62,8 +60,8 @@ func TestFindCompatibleNodeInstallationSkipsOlderNode(t *testing.T) {
 	if install.npmPath != filepath.Join(newDir, "npm") {
 		t.Fatalf("npmPath = %q, want npm beside selected Node", install.npmPath)
 	}
-	if install.version != "v24.3.0" {
-		t.Fatalf("version = %q, want v24.3.0", install.version)
+	if install.version != "v24.10.0" {
+		t.Fatalf("version = %q, want v24.10.0", install.version)
 	}
 }
 
