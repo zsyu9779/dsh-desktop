@@ -32,7 +32,7 @@
     "applicationCategory": "DeveloperApplication",
     "applicationSubCategory": "AI coding agent desktop client",
     "operatingSystem": ["macOS", "Windows", "Linux"],
-    "softwareVersion": "0.1.17",
+    "softwareVersion": "0.1.18",
     "isAccessibleForFree": true,
     "license": "https://opensource.org/license/mit",
     "codeRepository": "https://github.com/zsyu9779/dsh-desktop",
@@ -44,7 +44,7 @@
       "url": "https://github.com/zsyu9779"
     },
     "isBasedOn": "https://github.com/deepseek-ai/deepseek-harness",
-    "softwareRequirements": "Node.js 22.19 or later on the 22.x line, or Node.js 24.2 or later on the 24.x line"
+    "softwareRequirements": "Node.js 24.9 or later"
   }
   </script>
 </head>
@@ -74,10 +74,10 @@
         <h1>Harness power.<br><em>Desktop weight.</em></h1>
         <p class="lede">A lightweight Wails desktop shell for the official DeepSeek Harness Web UI. Native window, managed lifecycle, and three-platform releases—without a bundled browser runtime.</p>
         <div class="actions">
-          <a class="button button-primary" href="download/">Download v0.1.17</a>
+          <a class="button button-primary" href="download/">Download v0.1.18</a>
           <a class="button button-secondary" href="https://github.com/zsyu9779/dsh-desktop">View source</a>
         </div>
-        <p class="microcopy">Requires Node.js 22.19+ (22.x) or 24.2+ (24.x) · MIT licensed · Not affiliated with DeepSeek</p>
+        <p class="microcopy">Requires Node.js 24.9+ · MIT licensed · Not affiliated with DeepSeek</p>
       </div>
 
       <div class="window" aria-label="Architecture preview showing the desktop app starting DeepSeek Harness">
@@ -89,7 +89,7 @@
         </div>
         <div class="window-body">
           <p class="terminal-line"><strong>●</strong> checking <span class="blue">node</span> and <span class="blue">npm</span></p>
-          <p class="terminal-line"><strong>●</strong> starting @deepseek-ai/dsh@0.2.1-rc.2</p>
+          <p class="terminal-line"><strong>●</strong> starting @deepseek-ai/dsh@0.2.2-rc.1</p>
           <p class="terminal-line"><strong>●</strong> ready on 127.0.0.1:3080</p>
           <div class="window-card">
             <span class="window-card-label">Desktop host</span>
@@ -145,7 +145,7 @@
           <h2>Small download. Existing runtime.</h2>
         </div>
         <div>
-          <p class="section-intro">The app uses the operating system WebView and downloads the pinned DSH package through npm and pnpm. That keeps the desktop packages around 4–11 MB, but means Node.js 22.19+ on the 22.x line, or Node.js 24.2+ on the 24.x line, must already be installed.</p>
+          <p class="section-intro">The app uses the operating system WebView and downloads the pinned DSH package through npm and pnpm. That keeps the desktop packages around 4–11 MB, but means Node.js 24.9 or later, must already be installed.</p>
           <div class="actions">
             <a class="button button-secondary" href="compare/">See the comparison</a>
             <a class="button button-secondary" href="architecture/">Read the architecture</a>
@@ -160,7 +160,7 @@
           <span class="section-kicker">Download</span>
           <div>
             <h2>One release. Three platforms.</h2>
-            <p class="section-intro">Version 0.1.17 fixes external session links in the desktop shell after the jump to DeepSeek Harness 0.2.x, which opens them through a <code>window.open</code> call the macOS WebView cannot answer; the upstream pin stays at <code>@deepseek-ai/dsh@0.2.1-rc.2</code>, and the preinstalled plugins, the right sidebar's document preview on older WebKit, and QR-paired phone access on a trusted LAN are unchanged. Packages are built by GitHub Actions from the public source.</p>
+            <p class="section-intro">Version 0.1.18 moves the pinned upstream runtime to <code>@deepseek-ai/dsh@0.2.2-rc.1</code> and raises the Node.js floor to 24.9 to match its new requirement; the preinstalled plugins were re-verified against it and need no changes, and the right sidebar's document preview on older WebKit plus QR-paired phone access on a trusted LAN are unchanged. Packages are built by GitHub Actions from the public source.</p>
           </div>
         </div>
         <div class="download-grid">
@@ -221,7 +221,7 @@ window · launch · logs · shutdown</pre>
       <div class="footer-column">
         <strong>Project</strong>
         <a href="download/">Download</a>
-        <a href="releases/v0.1.17/">v0.1.17 notes</a>
+        <a href="releases/v0.1.18/">v0.1.18 notes</a>
         <a href="https://github.com/zsyu9779/dsh-desktop">GitHub</a>
       </div>
       <div class="footer-column">
