@@ -40,6 +40,10 @@ const remotePanel = document.getElementById('remote-panel');
 const remotePanelBackdrop = document.getElementById('remote-panel-backdrop');
 const remotePanelContent = document.getElementById('remote-panel-content');
 
+// 「手机远程」入口暂时下线：右上角悬浮按钮不再出现，面板、配对、relay 逻辑原样保留。
+// 需要恢复入口时把这个开关改回 true 即可。
+const REMOTE_PANEL_ENTRY_ENABLED = false;
+
 // Remote control belongs to the running product, not its splash screen. Move
 // the existing controls above the DSH iframe so Pairing stays reachable.
 remotePanelContent.append(accountRemote, remoteEl);
@@ -169,7 +173,7 @@ function setReadyUI(visible) {
     actionsReady.hidden = !visible;
     remoteEl.hidden = !visible;
     accountRemote.hidden = !visible;
-    remotePanelTrigger.hidden = !visible;
+    remotePanelTrigger.hidden = !visible || !REMOTE_PANEL_ENTRY_ENABLED;
     if (!visible) closeRemotePanel();
 }
 
